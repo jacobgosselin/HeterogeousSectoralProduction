@@ -1,0 +1,100 @@
+---
+title: "Quantitative exercises results"
+author: "Jacob Toner Gosselin"
+date: "2025-01-10"
+output: html_document
+---
+
+# Plot the microshock simulation results
+
+```{r}
+# load libraries and data
+library(ggplot2)
+gdp_simulation <- read.csv("../data/cleaned/structural/simulated_gdp.csv")
+
+plot_dist <- function(data, vars, labs){
+  dist <- data[, vars]
+  dist_long <- reshape2::melt(dist, value.name = "val", variable.name = "type")
+  dist_long$type <- factor(dist_long$type, levels = vars, labels = labs)
+  # plot the distribution of GDP, color lines by type
+  plot <- ggplot(dist_long, aes(x = val)) + 
+    stat_density(aes(color = type), geom="line",position="identity", size = .75) +
+    theme_minimal() + 
+    labs(title = "", x = "", y = "", color = "") + 
+    scale_color_manual(values = c("black", "red", "blue")) + 
+    theme(text = element_text(family = "serif", size = 32), legend.position = "bottom") 
+  return(plot)
+}
+
+het_year_annual <- plot_dist(gdp_simulation, c("gdp_dist_CD_annual", "gdp_dist_high_annual", "gdp_dist_low_annual"), c("Cobb-Douglas", "High", "Low"))
+het_year_quad <- plot_dist(gdp_simulation, c("gdp_dist_CD_quad", "gdp_dist_high_quad", "gdp_dist_low_quad"), c("Cobb-Douglas", "High", "Low")) 
+
+library(ggpubr)
+het_year_annual_panel <- het_year_annual + labs(title = "Annual")
+het_year_quad_panel <- het_year_quad + labs(title = "Quadrennial")
+het_year <- ggarrange(het_year_annual_panel, het_year_quad_panel, ncol = 2, nrow = 1) 
+
+# save
+ggsave("../figures/theory/gdp_het_year.pdf", het_year, width=16, height=9)
+het_year
+```
+
+# Microshocks vs realized
+
+```{r}
+library(readxl)
+library(dplyr)
+library(zoo)
+
+load("../data/raw/api_pull_BEA/GDP.RData")
+gdp_data_raw <- subset(gdp_data_raw, LineNumber == "1")
+gdp_data_raw$year <- as.numeric(gdp_data_raw$TimePeriod)
+gdp_data_raw$GDP <- as.numeric(gdp_data_raw$DataValue)/100
+gdp_data_raw$GDP_4 <- rollapplyr(gdp_data_raw$GDP, 4, sum, fill = NA, align = "right")
+gdp_data <- gdp_data_raw %>% select(year, GDP, GDP_4) %>% filter(year >= 1998)
+sd(gdp_data$GDP)
+sd(gdp_data$GDP_4)
+```
+
+# Simulated sectoral output
+
+```{r}
+# Libraries
+library(dplyr)
+library(tidyr)
+library(texreg)
+
+# Load data
+counterfactual <- read.csv("../data/cleaned/structural/counterfactual_output_change_byyear.csv")
+load("../data/cleaned/BEA_ILPAGO_data.RData")
+
+# clean and reshape long simulated
+colnames(counterfactual) <- c("Code", 1998:2023)
+counterfactual_long <- reshape2::melt(counterfactual, id.vars = "Code", variable.name = "year", value.name = "simulated_change")
+
+# generate TFP changes
+
+industry_TFP <- tfp_BEA_long %>% arrange(Code, year) %>%
+  group_by(Code) %>%
+  mutate(delta_tfp_1 = log(TFP) - log(lag(TFP)))
+
+# merge with observed
+observed <- subset(GO_long, !is.na(delta_logGO_1))
+comparison <- merge(observed, counterfactual_long, by = c("Code", "year"))
+comparison <- merge(comparison, industry_TFP, by = c("Code", "year"))
+
+# regress and get R2
+simulation_mod <- lm(delta_logGO_1 ~ simulated_change, data = comparison)
+comp_mod <- lm(delta_logGO_1 ~ delta_tfp_1, data = comparison)
+summary(simulation_mod)$r.squared
+summary(comp_mod)$r.squared
+
+# table results
+coef_map <- list("simulated_change" = "Coefficient", "delta_tfp_1" = "Coefficient")
+
+# Extract R-squared values and format them to 4 significant digits
+r_squared1 <- formatC(summary(simulation_mod)$r.squared, format = "f", digits = 4)
+r_squared2 <- formatC(summary(comp_mod)$r.squared, format = "f", digits = 4)
+
+texreg(list(simulation_mod, comp_mod), custom.coef.map = coef_map, custom.model.names = c("Simulated change", "Sectoral TFP"), custom.header = list("Observed change in sectoral output" = 1:2), table = FALSE, override.gof = list(c(r_squared1, r_squared2)), override.gof.names = c("R-squared"), override.gof.decimal.mark = ".", file = "../tables/simulation_comparison.tex")
+```

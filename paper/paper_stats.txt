@@ -1,0 +1,9 @@
+title: value 
+ low_sd_year: 0.265 
+ high_sd_year: 1.127 
+ median_sd_year: 0.631 
+ median_yoy_change: 0.686 
+ low_sd_Code: 0.442 
+ high_sd_Code: 1.654 
+ median_sd_Code: 0.751 
+ corr_stat: 0.417

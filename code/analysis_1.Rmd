@@ -1,0 +1,488 @@
+---
+title: "Empirical results"
+author: "Jacob Toner Gosselin"
+---
+
+# Load libraries and data
+
+```{r}
+# load libraries
+library(dplyr)
+library(tidyr)
+library(readxl)
+library(fixest)
+source("../code/helper_fncts.R")
+
+# load data
+load("../data/cleaned/resid_data_1998_2023.RData") # load non-api data
+# remove NaNs 
+resid_data_clean <- resid_data_1998_2023 %>%
+  filter(!is.na(delta_1) & !is.infinite(delta_1))
+
+# generate industry_year factor
+resid_data_clean$industry_year <- factor(paste(resid_data_clean$Code, resid_data_clean$year, sep = "-"))
+resid_data_clean$input_year <- factor(paste(resid_data_clean$j, resid_data_clean$year, sep = "-"))
+```
+
+# Residualizing regression
+
+```{r}
+library(fixest)
+library(lmtest)
+
+# run residualizing regression
+model_delta_1 <- feols(delta_1 ~ delta_logPj_1:industry_year | industry_year, data = resid_data_clean)
+model_delta_1_sum <- summary(model_delta_1)
+
+# store residuals 
+resid_results <- resid_data_clean
+resid_results$delta_1_resid <- model_delta_1$residuals
+
+save(resid_results, model_delta_1_sum, file = "../data/cleaned/resid_results_1998_2023.RData")
+```
+
+# Theta results
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+load("../data/cleaned/resid_results_1998_2023.RData")
+
+coef_names <- names(coef(model_delta_1_sum))
+theta_it <- as.data.frame(model_delta_1_sum$coefficients[grep("delta_logPj_1:", coef_names, value = TRUE)])
+colnames(theta_it) <- "beta"
+theta_it$coef <- rownames(theta_it)
+# split Code into 2 columns by :
+theta_it <- separate(theta_it, coef, into = c("term", "Code"), sep = ":")
+theta_it <- separate(theta_it, Code, into = c("Code", "year"), sep = "-")
+theta_it$Code <- gsub("industry_year", "", theta_it$Code)
+theta_it$theta <- 1 - theta_it$beta
+theta_it$year <- as.numeric(theta_it$year) 
+
+# check percent in 0-1
+perc_in_01 <- sum(theta_it$theta >= 0 & theta_it$theta <= 1) / nrow(theta_it)
+
+# ggplot histogram of theta
+theta_hist <- ggplot(theta_it, aes(x = theta)) +
+  geom_histogram(binwidth = 0.1, fill = "black", alpha = 0.5) +
+  theme_minimal() +
+  labs(title = "", x = expression(~theta[i]), y = "Frequency") +
+  theme(text = element_text(family = "serif", size = 32))
+
+ggsave("../figures/histograms/theta_hist_1yr.pdf", theta_hist, width = 9, height = 9)
+
+# calculate percent in 0-1
+sum(theta_it$theta >= 0 & theta_it$theta <= 1) / nrow(theta_it)
+
+# collapse mean and sd of theta by year
+theta_collapsed_Year = theta_it %>%
+  group_by(year) %>%
+  summarise(mean_theta = mean(theta),
+            sd_theta = sd(theta))
+
+# collapse mean and SD of theta by Code
+theta_collapsed_Code = theta_it %>%
+  group_by(Code) %>%
+  summarise(mean_theta = mean(theta),
+            sd_theta = sd(theta))
+
+# Plots
+
+theta_mean_SD_plot_byYear <- ggplot(theta_collapsed_Year, aes(x = year, y = mean_theta)) +
+  geom_line(color = "black") +  # Add a line for the mean
+  geom_ribbon(aes(ymin = mean_theta - sd_theta, ymax = mean_theta + sd_theta), alpha = 0.2, fill = "black") +  # Add shaded region for SD
+  geom_point() +  # Add points for the mean
+  theme_minimal() + 
+  theme(text = element_text(family = "serif", size = 24)) +
+  labs(x = "", y = "", title = "") + 
+  geom_hline(yintercept = 0, linetype = "dashed") + geom_hline(yintercept = 1, linetype = "dashed") + 
+  ylim(-2.5, 2)
+
+theta_mean_SD_plot_byCode <- ggplot(theta_collapsed_Code, aes(y = Code, x = mean_theta)) +
+  geom_errorbarh(aes(xmin = mean_theta - sd_theta, xmax = mean_theta + sd_theta), height = 0.2) +
+  geom_point() +
+  theme_minimal() + 
+  theme(axis.text.y = element_blank(), text = element_text(family = "serif", size = 24)) +
+  labs(y = "Year", x = expression(~theta[i]), title = "") + 
+  geom_vline(xintercept = 0, linetype = "dashed") + 
+  geom_vline(xintercept = 1, linetype = "dashed")
+
+# do the same plot as above but horizontal (Code x-axis, theta y-axis)
+theta_mean_SD_plot_byCode_h <- ggplot(theta_collapsed_Code, aes(x = Code, y = mean_theta)) +
+  geom_errorbar(aes(ymin = mean_theta - sd_theta, ymax = mean_theta + sd_theta), width = 0.2) +
+  geom_point() +
+  theme_minimal() + 
+  theme(axis.text.x = element_blank(), text = element_text(family = "serif", size = 24)) +
+  labs(x = "", y = "", title = "") + 
+  geom_hline(yintercept = 0, linetype = "dashed") + 
+  geom_hline(yintercept = 1, linetype = "dashed") + 
+  ylim(-2.5, 2)
+
+# save individual figures
+# ggsave("../figures/elasticity_est/elasticity_byYear.pdf", theta_mean_SD_plot_byYear, width = 9, height = 9)
+# ggsave("../figures/elasticity_est/elasticity_byCode.pdf", theta_mean_SD_plot_byCode, width = 9, height = 9)
+
+# save joint figures
+library(ggpubr)
+combined <- ggarrange(theta_mean_SD_plot_byYear, theta_mean_SD_plot_byCode_h, ncol = 2, nrow = 1)
+ggsave("../figures/elasticity_est/elasticity_byYearAndCode.pdf", combined, width = 16, height = 9)
+
+# save results
+save(theta_collapsed_Code, theta_collapsed_Year, file = "../data/cleaned/elasticity_ests.RData")
+
+
+# Save some paper stats
+
+theta_it_lag <- theta_it %>%
+  group_by(Code) %>%
+  mutate(theta_lag = lag(theta, order_by = year)) %>%
+  filter(!is.na(theta_lag)) %>%
+  mutate(theta_diff = theta - theta_lag)
+
+# SDs by year and by Code
+
+low_sd_year = min(theta_collapsed_Year$sd_theta)
+high_sd_year = max(theta_collapsed_Year$sd_theta)
+median_sd_year = median(theta_collapsed_Year$sd_theta)
+median_yoy_change = median(abs(theta_it_lag$theta_diff))
+
+low_sd_Code = min(theta_collapsed_Code$sd_theta)
+high_sd_Code = max(theta_collapsed_Code$sd_theta)
+median_sd_Code = median(theta_collapsed_Code$sd_theta)
+
+# correlation in theta changes 
+
+reshape_correlation <- theta_it_lag %>% select(Code, year, theta_diff) %>% spread(Code, theta_diff)
+corr_matrix <- cor(reshape_correlation[, -1], use = "pairwise.complete.obs")
+upper_triangle <- corr_matrix[upper.tri(corr_matrix)]
+corr_stat <- mean(upper_triangle)
+
+# write to file (round to 3-sig-dig)
+write(paste("title: value \n",
+            "low_sd_year:", round(low_sd_year, 3), "\n", 
+            "high_sd_year:", round(high_sd_year, 3), "\n", 
+            "median_sd_year:", round(median_sd_year, 3), "\n", 
+            "median_yoy_change:", round(median_yoy_change, 3), "\n", 
+            "low_sd_Code:", round(low_sd_Code, 3), "\n", 
+            "high_sd_Code:", round(high_sd_Code, 3), "\n", 
+            "median_sd_Code:", round(median_sd_Code, 3), "\n", 
+            "corr_stat:", round(corr_stat, 3)), file = "../paper/paper_stats.txt")
+
+# store stats as table in csv, with column titles "title", "value"
+write.table(data.frame(title = c("low-sd-year", "high-sd-year", "median-sd-year", "median-yoy-change", "low-sd-Code", "high-sd-Code", "median-sd-Code", "corr-stat"), 
+                       value = c(round(low_sd_year, 3), round(high_sd_year, 3), round(median_sd_year, 3), round(median_yoy_change, 3), round(low_sd_Code, 3), round(high_sd_Code, 3), 
+                                 round(median_sd_Code, 3), round(corr_stat, 3))), file = "../paper/paper_stats.csv", sep = ",", row.names = FALSE)
+```
+
+# Residual results
+
+```{r}
+# load libraries
+library(ggplot2)
+library(gridExtra)
+library(fixest)
+library(tidyr)
+library(dplyr)
+library(scales)
+
+# load data
+load("../data/cleaned/resid_results_1998_2023.RData")
+
+# set R2
+r2_1 <- r2(model_delta_1_sum)["r2"]
+
+lab1 = "Original"
+lab2 = "Residualized"
+colors <- setNames(hue_pal()(2), c(lab1, lab2))
+
+plot_data <- resid_results %>% 
+  filter(!is.na(delta_1) & !is.na(delta_1_resid) & !is.infinite(delta_1) & !is.infinite(delta_1_resid))
+
+# set delta_1/delta_1_resid/delta_5/delta_5_resid/delta_10/delta_10_resid to NA if < cutoff
+cutoff <- 0.01
+plot_data$delta_1[abs(plot_data$delta_1) < cutoff] <- NA
+plot_data$delta_1_resid[abs(plot_data$delta_1_resid) < cutoff] <- NA
+
+# Overlapping histograms for delta_1 and delta_1_resid using frequency
+p1 <- ggplot(plot_data) +
+  geom_histogram(aes(x = delta_1, y = ..density.., fill = lab1), binwidth = 0.01, alpha = 0.5) +
+  geom_histogram(aes(x = delta_1_resid, y = ..density.., fill = lab2), binwidth = 0.01, alpha = 0.5) +
+  xlim(-2, 2) +
+  theme_minimal() +
+  scale_fill_manual(values = colors) +
+  labs(x = expression(~Delta*log(tilde(a[ij]))~ ", 1yr"), y = "", fill = "", caption = paste("R^2: ", round(r2_1, 2))) +
+  theme(text = element_text(family = "serif", size = 32), legend.position = "bottom")
+
+# Display the plots
+ggsave("../figures/histograms/resid_hist.pdf", p1, width = 16, height = 9)
+
+# sum delta_1_resid by Code and year
+resid_sum <- resid_results %>%
+  group_by(Code, year) %>%
+  summarise(sum_delta_1_resid = sum(delta_1_resid, na.rm = TRUE))
+```
+
+# Residuals LPs
+
+```{r}
+library(lpirfs)
+library(dplyr)
+library(ggplot2)
+
+# load residuals data
+load("../data/cleaned/resid_results_1998_2023.RData")
+# load BEA + Patents data
+load("../data/cleaned/patent_data_agg.RData")
+
+# we have to use Code_patent, to account for multiple Codes mapping to some NAICS 3-digit 
+temp <- resid_results[, c("Code", "year", "delta_1", "delta_1_resid")]
+panel_data <- temp %>%
+  group_by(Code, year) %>%
+  summarise(
+    sum_delta_1 = sum(abs(delta_1), na.rm = TRUE),
+    sum_delta_1_resid = sum(abs(delta_1_resid), na.rm = TRUE)
+  )
+
+panel_data <- merge(panel_data, patent_data_agg, by = c("Code", "year"), all.x = FALSE, all.y = TRUE)
+panel_data <- panel_data[, c("Code", "year", "sum_delta_1", "sum_delta_1_resid", "patents_xi_real", "patents_num", "patents_cites")]
+
+# local projections
+patents_value_lp_og <- lp_lin_panel(panel_data, panel_model = "within", panel_effect = "twoways", robust_cov = "vcovHC", robust_method = "white1", diff_shock = FALSE, endog_data = "sum_delta_1", shock = "patents_xi_real", confint = 1, hor = 10, cumul_mult = FALSE)
+patents_value_lp_resid <- lp_lin_panel(panel_data, panel_model = "within", panel_effect = "twoways", robust_cov = "vcovHC", robust_method = "white1", diff_shock = FALSE, endog_data = "sum_delta_1_resid", shock = "patents_xi_real", confint = 1, hor = 10, cumul_mult = FALSE)
+patents_citations_lp_og <- lp_lin_panel(panel_data, panel_model = "within", panel_effect = "twoways", robust_cov = "vcovHC", robust_method = "white1", diff_shock = FALSE, endog_data = "sum_delta_1", shock = "patents_cites", confint = 1, hor = 10, cumul_mult = FALSE)
+patents_citations_lp_resid <- lp_lin_panel(panel_data, panel_model = "within", panel_effect = "twoways", robust_cov = "vcovHC", robust_method = "white1", diff_shock = FALSE, endog_data = "sum_delta_1_resid", shock = "patents_cites", confint = 1, hor = 10, cumul_mult = FALSE)
+
+# plot and save
+patents_value_lp_both <- graph_lp_both(patents_value_lp_og, patents_value_lp_resid)
+patents_citations_lp_both <- graph_lp_both(patents_citations_lp_og, patents_citations_lp_resid)
+
+patents_value_lp <- graph_lp_one(patents_value_lp_resid, "resid")
+patents_citations_lp <- graph_lp_one(patents_citations_lp_resid, "resid")
+
+# ggsave("../figures/local_projections/patents_value_residual_og&resid.pdf", patents_value_lp_both, width = 16, height = 9)
+# ggsave("../figures/local_projections/patents_citations_og&resid.pdf", patents_citations_lp_both, width = 16, height = 9)
+ggsave("../figures/local_projections/patents_value_resid.pdf", patents_value_lp, width = 9, height = 9)
+ggsave("../figures/local_projections/patents_citations_resid.pdf", patents_citations_lp, width = 16, height = 9)
+```
+
+# Constant/Common theta
+
+Here I just impose constant elasticity across years versus constant elasticity across industries. The point estimates are already captured in the mean thetas by year and Code, plotted above. The real point is to show that the standard errors cut-down here, providing real precision on our heterogenous estimates. 
+
+## Estimation
+```{r}
+library(fixest)
+
+# load data
+load("../data/cleaned/resid_data_1998_2023.RData") # load non-api data
+# remove NaNs 
+resid_data_clean <- resid_data_1998_2023 %>%
+  filter(!is.na(delta_1) & !is.infinite(delta_1))
+
+# generate industry_year factor
+resid_data_clean$industry_year <- factor(paste(resid_data_clean$Code, resid_data_clean$year, sep = "-"))
+resid_data_clean$input_year <- factor(paste(resid_data_clean$j, resid_data_clean$year, sep = "-"))
+
+# run residualizing regression
+model_delta_1_hetCode <- feols(delta_1 ~ delta_logPj_1:Code | industry_year, data = resid_data_clean)
+model_delta_1_hetCode_sum <- summary(model_delta_1_hetCode, vcov_cluster("industry_year"))
+model_delta_1_hetYear <- feols(delta_1 ~ delta_logPj_1:year | industry_year, data = resid_data_clean)
+model_delta_1_hetYear_sum <- summary(model_delta_1_hetYear, vcov_cluster("industry_year"))
+
+# store residuals 
+resid_results <- resid_data_clean
+resid_results$delta_1_resid_hetCode <- model_delta_1_hetCode$residuals
+resid_results$delta_1_resid_hetYear <- model_delta_1_hetYear$residuals
+```
+
+## Plot thetas
+```{r}
+library(ggplot2)
+
+coef_names <- names(coef(model_delta_1_hetCode_sum))
+theta_i <- as.data.frame(model_delta_1_hetCode_sum$coefficients[grep("delta_logPj_1:", coef_names, value = TRUE)])
+colnames(theta_i) <- "beta"
+theta_i$coef <- rownames(theta_i)
+theta_i <- separate(theta_i, coef, into = c("term", "Code"), sep = ":")
+theta_i$theta <- 1 - theta_i$beta
+theta_i$se <- model_delta_1_hetCode_sum$se[grep("delta_logPj_1:", coef_names, value = TRUE)]
+theta_i$Code <- gsub("Code", "", theta_i$Code)
+
+coef_names <- names(coef(model_delta_1_hetYear_sum))
+theta_t <- as.data.frame(model_delta_1_hetYear_sum$coefficients[grep("delta_logPj_1:", coef_names, value = TRUE)])
+colnames(theta_t) <- "beta"
+theta_t$coef <- rownames(theta_t)
+theta_t <- separate(theta_t, coef, into = c("term", "year"), sep = ":")
+theta_t$theta <- 1 - theta_t$beta
+theta_t$se <- model_delta_1_hetYear_sum$se[grep("delta_logPj_1:", coef_names, value = TRUE)]
+theta_t$year <- as.numeric(gsub("year", "", theta_t$year)) 
+
+# plot theta_i +/- 1 SE for each Code
+theta_i_plot <- ggplot(theta_i, aes(x = Code, y = theta)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = theta - 1.65*se, ymax = theta + 1.65*se), width = 0.2) +
+  theme_minimal() +
+  labs(title = "", x = "", y = expression(~theta[i])) + # suppress xlabel
+  theme(text = element_text(family = "serif", size = 32),  axis.text.x = element_blank()) +
+  geom_hline(yintercept = 0, linetype = "dashed") + 
+  geom_hline(yintercept = 1, linetype = "dashed")
+
+# plot theta_t +/- 1 SE for each year
+theta_t_plot <- ggplot(theta_t, aes(x = year, y = theta)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = theta-1.65*se, ymax = theta+1.65*se), alpha = 0.2) +
+  geom_point() + 
+  theme_minimal() +
+  labs(title = "", x = "Year", y = expression(~theta[t])) +
+  theme(text = element_text(family = "serif", size = 32)) + 
+  geom_hline(yintercept = 0, linetype = "dashed") + 
+  geom_hline(yintercept = 1, linetype = "dashed")
+
+ggsave("../figures/elasticity_est/elasticity_onlyCode.pdf", theta_i_plot, width = 16, height = 9)
+ggsave("../figures/elasticity_est/elasticity_onlyYear.pdf", theta_t_plot, width = 16, height = 9)
+```
+
+## Local projections
+```{r}
+library(lpirfs)
+library(dplyr)
+library(ggplot2)
+
+# load BEA + Patents data
+load("../data/cleaned/patent_data_agg.RData")
+
+# we have to use Code_patent, to account for multiple Codes mapping to some NAICS 3-digit 
+resid_results$delta_1_resid <- resid_results$delta_1_resid_hetYear
+temp <- resid_results[, c("Code", "year", "delta_1", "delta_1_resid")]
+panel_data <- temp %>%
+  group_by(Code, year) %>%
+  summarise(
+    sum_delta_1 = sum(abs(delta_1), na.rm = TRUE),
+    sum_delta_1_resid = sum(abs(delta_1_resid), na.rm = TRUE)
+  )
+
+panel_data <- merge(panel_data, patent_data_agg, by = c("Code", "year"), all.x = TRUE, all.y = TRUE)
+panel_data <- panel_data[, c("Code", "year", "sum_delta_1", "sum_delta_1_resid", "patents_xi_real", "patents_num", "patents_cites")]
+
+# local projections
+patents_value_lp_og <- lp_lin_panel(panel_data, panel_model = "within", panel_effect = "twoways", robust_cov = "vcovHC", robust_method = "white1", diff_shock = FALSE, endog_data = "sum_delta_1", shock = "patents_xi_real", confint = 1, hor = 15, cumul_mult = FALSE)
+patents_value_lp_resid <- lp_lin_panel(panel_data, panel_model = "within", panel_effect = "twoways", robust_cov = "vcovHC", robust_method = "white1", diff_shock = FALSE, endog_data = "sum_delta_1_resid", shock = "patents_xi_real", confint = 1, hor = 15, cumul_mult = FALSE)
+patents_citations_lp_og <- lp_lin_panel(panel_data, panel_model = "within", panel_effect = "twoways", robust_cov = "vcovHC", robust_method = "white1", diff_shock = FALSE, endog_data = "sum_delta_1", shock = "patents_cites", confint = 1, hor = 15, cumul_mult = FALSE)
+patents_citations_lp_resid <- lp_lin_panel(panel_data, panel_model = "within", panel_effect = "twoways", robust_cov = "vcovHC", robust_method = "white1", diff_shock = FALSE, endog_data = "sum_delta_1_resid", shock = "patents_cites", confint = 1, hor = 15, cumul_mult = FALSE)
+
+# plot and save
+patents_value_lp_both <- graph_lp_both(patents_value_lp_og, patents_value_lp_resid)
+patents_citations_lp_both <- graph_lp_both(patents_citations_lp_og, patents_citations_lp_resid)
+
+patents_value_lp <- graph_lp_one(patents_value_lp_resid, "resid")
+patents_citations_lp <- graph_lp_one(patents_citations_lp_resid, "resid")
+```
+
+# Robustness tests
+
+## Atalay instruments
+```{r}
+library(texreg)
+library(tidyr)
+library(dplyr)
+
+# load Atalay data
+load("../data/cleaned/atalay_instruments.RData")
+
+# merge 
+atalay_comparison <- merge(resid_data_clean, atalay_instruments, by = c("Code", "year", "j"))
+top_10_subset <- resid_data_clean %>%
+  group_by(Code, year) %>%
+  top_n(10, val) %>%
+  filter(year < 2014)
+atalay_comparison_subset <- merge(top_10_subset, atalay_instruments, by = c("Code", "year", "j"))
+
+# run IV regression
+atalay_IV <- feols(delta_1 ~ 1 | delta_logPratio_1_II ~ military_shock_i +  military_shock_j + military_shock_suppliers, data = atalay_comparison)
+atalay_comp <- feols(delta_1 ~ delta_logPj_1 | industry_year, data = atalay_comparison)
+atalay_IV_subset <- feols(delta_1_Out ~ 1 | delta_logPratio_1_II + delta_logPratio_1_IIOut ~ military_shock_i +  military_shock_j + military_shock_suppliers, data = atalay_comparison_subset)
+atalay_comp_subset <- feols(delta_1 ~ delta_logPj_1 | industry_year, data = atalay_comparison_subset)
+
+# texreg output
+# use cluster robust SEs
+atalay_IV_sum_robust <- summary(atalay_IV, vcov = "hetero")
+atalay_comp_sum_robust <- summary(atalay_comp, vcov = "hetero")
+atalay_IV_sum_cluster <- summary(atalay_IV, vcov_cluster("industry_year"))
+atalay_comp_sum_cluster <- summary(atalay_comp, vcov_cluster("industry_year"))
+atalay_IV_sum_subset_robust <- summary(atalay_IV_subset, vcov = "hetero")
+atalay_comp_sum_subset_robust <- summary(atalay_comp_subset, vcov = "hetero")
+atalay_IV_sum_subset_cluster <- summary(atalay_IV_subset, vcov_cluster("industry_year"))
+atalay_comp_sum_subset_cluster <- summary(atalay_comp_subset, vcov_cluster("industry_year"))
+
+# texreg results
+# override coef, use 1-coefficient
+coef_map <- list(
+  "delta_logPj_1" = "Elasticity",
+  "fit_delta_logPratio_1_II" = "Elasticity"
+)
+
+texreg(list(atalay_comp_sum_robust, atalay_IV_sum_robust, atalay_comp_sum_cluster, atalay_IV_sum_cluster), custom.coef.map = coef_map, custom.model.names = c("Uniform", "Atalay IV", "Uniform", "Atalay IV"), custom.header = list("Robust SE" = 1:2, "Clustered SE" = 3:4), include.rsquared = FALSE, include.adjrs = FALSE, table = FALSE, file = "../tables/atalay_comparison.tex", override.coef = list(1 - atalay_comp_sum_robust$coefficients, 1 - atalay_IV_sum_robust$coefficients, 1 - atalay_comp_sum_cluster$coefficients, 1 - atalay_IV_sum_cluster$coefficients), include.nobs=FALSE, include.groups=FALSE, stars = numeric(0))
+
+coef_map <- list(
+  "delta_logPj_1" = "Elasticity (inner-nest)",
+  "fit_delta_logPratio_1_II" = "Elasticity (inner-nest)",
+  "fit_delta_logPratio_1_IIOut" = "Elasticity (outer-nest)"
+)
+
+texreg(list(atalay_comp_sum_subset_robust, atalay_IV_sum_subset_robust, atalay_comp_sum_subset_cluster,  atalay_IV_sum_subset_cluster), custom.coef.map = coef_map, custom.model.names = c("Uniform", "Atalay IV", "Uniform", "Atalay IV"), custom.header = list("Robust SE" = 1:2, "Clustered SE" = 3:4), include.rsquared = FALSE, include.adjrs = FALSE, table = FALSE, file = "../tables/atalay_comparison_subset.tex", override.coef = list(1 - atalay_comp_sum_subset_robust$coefficients, 1 - atalay_IV_sum_subset_robust$coefficients,1 - atalay_comp_sum_subset_cluster$coefficients, 1 - atalay_IV_sum_subset_cluster$coefficients), include.nobs=FALSE, include.groups=FALSE, stars = numeric(0))
+
+atalay_IV_sum_subset_robust
+```
+
+## Top 10 subset
+```{r}
+library(tidyr)
+library(dplyr)
+
+# keep the top 10 val values for each Code-year combinations
+top_10 <- resid_data_clean %>%
+  group_by(Code, year) %>%
+  top_n(10, val)
+
+# run residualizing regression
+model_delta_1_top10_overall <- feols(delta_1 ~ delta_logPj_1 | industry_year, data = top_10)
+model_delta_1_top10_industry <- feols(delta_1 ~ delta_logPj_1:Code | industry_year, data = top_10)
+model_delta_1_top10_year <- feols(delta_1 ~ delta_logPj_1:year | industry_year, data = top_10)
+model_delta_1_sum_top10_overall <- summary(model_delta_1_top10_overall, vcov = "hetero")
+model_delta_1_sum_top10_industry <- summary(model_delta_1_top10_industry, vcov = "hetero")
+model_delta_1_sum_top10_year <- summary(model_delta_1_top10_year, vcov = "hetero")
+```
+
+
+# Misc
+
+## Fracking
+
+```{r}
+library(lpirfs)
+library(dplyr)
+library(ggplot2)
+library(readxl)
+
+# load residuals data
+load("../data/cleaned/resid_results_1998_2023.RData")
+shale_prod <- read_excel("../data/raw/misc/shale_prod.xls", 
+    sheet = "Data 1", skip = 2)
+# extract year from date
+shale_prod$year <- as.numeric(format(as.Date(shale_prod$Date), "%Y"))
+
+panel_data <- resid_results %>%
+  group_by(Code, year) %>%
+  summarise(
+    sum_delta_1 = sum(abs(delta_1), na.rm = TRUE),
+    sum_delta_1_resid = sum(abs(delta_1_resid), na.rm = TRUE)
+  )
+oil_gas_extraction <- subset(panel_data, Code == "211")
+
+fracking <- merge(oil_gas_extraction, shale_prod, by = "year")
+fracking$log_delta_prod <- log(fracking$`U.S. Shale Production (Billion Cubic Feet)`) - log(lag(fracking$`U.S. Shale Production (Billion Cubic Feet)`))
+# get correlation, removing NAs
+cor(fracking$sum_delta_1_resid, fracking$log_delta_prod, use = "pairwise.complete.obs")
+```
