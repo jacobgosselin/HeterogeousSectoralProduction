@@ -1,6 +1,6 @@
 # Heterogeneity in Sectoral Production and the Macro Effect of Sectoral Shocks: Replication Code
 
-Replication code for "Heterogeneity in Sectoral Production and the Macro Effect of Sectoral Shocks" ([arXiv](https://arxiv.org/abs/2502.07896). Generates data for empirical analysis, empirical results, and quantitative results. For a full run from raw data to tables and figures used in the paper, run..
+Replication code for "Heterogeneity in Sectoral Production and the Macro Effect of Sectoral Shocks" ([arXiv](https://arxiv.org/abs/2502.07896)). Generates data for empirical analysis, empirical results, and quantitative results. For a full run from raw data to tables and figures used in the paper, run..
 
 1. code/master_run_1997-2023.R, which generates data/cleaned/resid_data_1998_2023.RData (and components of it), the main dataset used for empirical results.
 2. code/analysis_1.Rmd, which generates all empirical results in paper.
