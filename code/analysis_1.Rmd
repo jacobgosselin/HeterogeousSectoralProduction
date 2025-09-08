@@ -14,7 +14,7 @@ library(fixest)
 source("../code/helper_fncts.R")
 
 # load data
-load("../data/cleaned/resid_data_1998_2023.RData") # load non-api data
+load("../data/cleaned/resid_data_1998_2023.RData") 
 # remove NaNs 
 resid_data_clean <- resid_data_1998_2023 %>%
   filter(!is.na(delta_1) & !is.infinite(delta_1))
