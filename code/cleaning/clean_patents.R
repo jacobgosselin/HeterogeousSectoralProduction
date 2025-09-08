@@ -68,7 +68,7 @@ patent_data <- subset(patent_data, !is.na(Summary))
 patent_data$Code <- patent_data$Summary
 patent_data$filing_date <- as.Date(as.character(patent_data$filing_date), format = "%Y%m%d")
 patent_data$issue_date <- as.Date(as.character(patent_data$issue_date), format = "%Y%m%d")
-patent_data$year <- as.numeric(format(patent_data$issue_date, "%Y")) # using filing date as year 
+patent_data$year <- as.numeric(format(patent_data$filing_date, "%Y")) # using filing date as year 
 patent_data <- patent_data %>% select(c('patent_num', 'permno', 'Code', 'year', 'xi_real', 'xi_nominal', 'cites'))
 
 patent_data$xi_real = patent_data$xi_real/1000 # billions $

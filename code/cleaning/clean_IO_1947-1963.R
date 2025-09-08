@@ -32,7 +32,7 @@ make_to_share <- function(make){
 
 # take use table, return directrequirements table
 use_to_dr <- function(use){
-  total <- as.numeric(use[use$`Commodity Description` == "Total Industry Output",])
+  total <- as.numeric(use[use$`Commodity Description` == "Total Industry Output",]) # I normalize by industry output here
   use <- use[1:43, 1:45] # exclude government portion and totals
   total <- total[1:45] # exclude government portion and totals
   dr <- use
@@ -43,6 +43,9 @@ use_to_dr <- function(use){
 # take share and dr table, return A, input-output by industry
 share_dr_to_A <- function(share, dr){
   labels <- share[,1:2]
+  # row i is shares of commodities c produced by industry i (share is industry-by-commodity)
+  # column j is spending by industry j on commodities c (use is commodity-by-industry)
+  # ij matrix result is expenditure ji, i.e. expenditure by column industry on row industry
   A_prime <- as.matrix(share[,3:ncol(share)]) %*% as.matrix(dr[,3:ncol(dr)]) # DR' X S' = (S X DR)'
   A <- t(A_prime)
   colnames(A) <- t(labels[,1])
@@ -74,37 +77,22 @@ names(A_byyear_1947_1962) <- years
 
 # generate A as share of int. input spending  ------------------------------------------
 
-intermediate_inputs_1947_1997 <- read_excel("data/raw/BEA_1947-1996/GDPbyInd_II_1947-1997.xlsx", 
-                                            sheet = "II", skip = 5)
-intermediate_inputs_1947_1997$'Industry Description' <- intermediate_inputs_1947_1997$...2
-intermediate_inputs_1947_1997 <- intermediate_inputs_1947_1997[, -c(1:2)]
-
-# gen_A_tilde function
-gen_A_tilde <- function(A_byyear, II) {
-  industryuse_byyear <- A_byyear
+# gen_A_int
+gen_A_int <- function(A_byyear) {
+  A_Int_byyear <- A_byyear
   for (i in 1:length(A_byyear)) {
-    industryuse_byyear[[i]][,3:ncol(A_byyear[[i]])] <- A_byyear[[i]][,3:ncol(A_byyear[[i]])] * A_byyear[[i]][,ncol(A_byyear[[i]])]
+    exp <- A_byyear[[i]][,3:(ncol(A_byyear[[i]])-1)] * A_byyear[[i]][,ncol(A_byyear[[i]])]
+    rowsums <- rowSums(exp)
+    # divide each row by rowsum
+    int_exp <- sweep(exp, 1, rowsums, FUN = "/")
+    A_Int_byyear[[i]][,3:(ncol(A_Int_byyear[[i]])-1)] <- int_exp
   }
   
-  # merge each item with respective year column in intermediate inputs
-  for (i in names(industryuse_byyear)) {
-    year = as.character(i)
-    temp_intermediate <- II[, c(year, "Industry Description")]
-    colnames(temp_intermediate) <- c("Total Intermediate", "Industry Description")
-    temp_intermediate$'Total Intermediate' <- as.numeric(temp_intermediate$'Total Intermediate')
-    industryuse_byyear[[year]] <- merge(industryuse_byyear[[year]], temp_intermediate, by = "Industry Description", all.x = TRUE)
-    # divide columns 3:ncol-1 by Total Intermediate
-    industryuse_byyear[[year]][,3:(ncol(industryuse_byyear[[year]])-1)] <- industryuse_byyear[[year]][,3:(ncol(industryuse_byyear[[year]])-1)] / industryuse_byyear[[year]]$'Total Intermediate'
-    # set warehousing storage to 0, since missing II spending, Code 493
-    # industryuse_byyear[[year]][industryuse_byyear[[year]]$'Code' == "493", 3:(ncol(industryuse_byyear[[year]])-1)] <- 0
-    }
-  return(industryuse_byyear)
+  return(A_Int_byyear)
   
 }
 
-A_Int_byyear_1947_1962 = gen_A_tilde(A_byyear_1947_1962, intermediate_inputs_1947_1997)
-# set warehousing storage to 0, since missing II spending
-
+A_Int_byyear_1947_1962 = gen_A_int(A_byyear_1947_1962)
 
 # save A matrices
 save(A_byyear_1947_1962, file = "data/cleaned/A_byyear_1947-1962.RData")

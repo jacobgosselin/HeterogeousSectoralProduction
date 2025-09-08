@@ -8,11 +8,11 @@ gen_delta <- function(list, year, horizon, log_change = FALSE) {
   # Convert year to numeric in case it's provided as a string
   year <- as.numeric(year)
   
-  # Identify the names of the current year and 5 years ago
+  # Identify the names of the current year and horizon years ago
   current_year_name <- as.character(year)
   h_years_ago_name <- as.character(year - horizon)
   
-  # Extract the dataframes for the current year and 5 years ago
+  # Extract the dataframes for the current year and horizon years ago
   current_year_df <- list[[current_year_name]]
   h_years_ago_df <- list[[h_years_ago_name]]
   
@@ -22,8 +22,8 @@ gen_delta <- function(list, year, horizon, log_change = FALSE) {
   }
   
   # Subset both dataframes to include only columns from the 3rd column onwards
-  current_year_df_subset <- current_year_df[, 3:(ncol(current_year_df)-1)]
-  h_years_ago_df_subset <- h_years_ago_df[, 3:(ncol(h_years_ago_df)-1)]
+  current_year_df_subset <- current_year_df[, 3:(ncol(current_year_df)-1)] # last column is total industry output/spending
+  h_years_ago_df_subset <- h_years_ago_df[, 3:(ncol(h_years_ago_df)-1)] # last column is total industry output/spending
   
   # Calculate the change
   if (log_change) {
@@ -40,6 +40,32 @@ gen_delta <- function(list, year, horizon, log_change = FALSE) {
   
   # Return the resulting dataframe
   return(change_df)
+}
+
+
+#################################
+# iXj --> ij, for A matrices
+#################################
+make_mat_long <- function(A){
+  # reshape A matrices to long format
+  A_long <- reshape2::melt(A, id.vars = c("Code", "Industry Description"))
+  colnames(A_long) <- c("Code", "Industry Description", "j", "val")
+  # subset out T008 (total industry output)
+  A_long <- subset(A_long, j != "T008")
+  return(A_long)
+}
+
+make_mat_list_long <- function(A_list){
+  og_names <- names(A_list)
+  A_long_list <- lapply(A_list, make_mat_long)
+  names(A_long_list) <- og_names
+  A_long_list <- lapply(names(A_long_list), function(year) {
+    df <- A_long_list[[year]]
+    df$year <- year  # Add a new column 'year' with the name of the list item
+    return(df)
+  })
+  A_long <- do.call(rbind, A_long_list)
+  return(A_long)
 }
 
 ###################
@@ -124,31 +150,6 @@ calculate_extremes <- function(df) {
   result$delta_max <- as.numeric(result$delta_max)
   
   return(result)
-}
-
-#################################
-# iXj --> ij, for A matrices
-#################################
-make_mat_long <- function(A){
-  # reshape A matrices to long format
-  A_long <- reshape2::melt(A, id.vars = c("Code", "Industry Description"))
-  colnames(A_long) <- c("Code", "Industry Description", "j", "val")
-  # subset out T008 (total industry output)
-  A_long <- subset(A_long, j != "T008")
-  return(A_long)
-}
-
-make_mat_list_long <- function(A_list){
-  og_names <- names(A_list)
-  A_long_list <- lapply(A_list, make_mat_long)
-  names(A_long_list) <- og_names
-  A_long_list <- lapply(names(A_long_list), function(year) {
-    df <- A_long_list[[year]]
-    df$year <- year  # Add a new column 'year' with the name of the list item
-    return(df)
-  })
-  A_long <- do.call(rbind, A_long_list)
-  return(A_long)
 }
 
 ########################################
@@ -285,7 +286,7 @@ graph_lp_both <- function(lp_og, lp_resid){
     geom_hline(yintercept = 0, linetype = "dotted", color = "black") +
     labs(title = "",
          x = "Horizon",
-         y = "Impulse Response Function",
+         y = "",
          color = "Measure",
          fill = "Measure") + 
     theme_minimal() + theme(legend.position = "bottom", text = element_text(family = "serif", size = 32))

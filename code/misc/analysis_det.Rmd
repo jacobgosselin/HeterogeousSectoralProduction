@@ -1,0 +1,215 @@
+---
+title: "Empirical results (detailed)"
+author: "Jacob Toner Gosselin"
+---
+
+# Load libraries and data
+
+```{r}
+# load libraries
+library(dplyr)
+library(tidyr)
+library(readxl)
+library(fixest)
+source("../helper_fncts.R")
+
+# load data
+load("../../data/cleaned/resid_data_det.RData") # load non-api data
+# remove NaNs 
+resid_data_clean <- resid_data_det %>%
+  filter(!is.na(delta_5) & !is.infinite(delta_5))
+
+# generate industry_year factor
+resid_data_clean$industry_year <- factor(paste(resid_data_clean$Code, resid_data_clean$year, sep = "-"))
+
+# load annual data
+load("../../data/cleaned/resid_data_1998_2023.RData")
+# generate delta_5, delta_logPj_5
+resid_data_1998_2023 <- resid_data_1998_2023 %>%
+  group_by(Code, j) %>%
+  arrange(Code, j, year) %>%
+  mutate(delta_5 = log(val) - log(lag(val, 5)),
+         delta_logPj_5 = log(price_j) - log(lag(price_j, 5))) 
+# remove NaNs 
+resid_data_clean_annual <- resid_data_1998_2023 %>%
+  filter(!is.na(delta_5) & !is.infinite(delta_5) & (year == 2012 | year == 2017)) # note that I'm subsetting to the relevant years 
+
+# generate industry_year factor
+resid_data_clean_annual$industry_year <- factor(paste(resid_data_clean_annual$Code, resid_data_clean_annual$year, sep = "-"))
+
+# subset to top-10 suppliers
+top_10_annual <- resid_data_clean_annual %>%
+  group_by(Code, year) %>%
+  top_n(10, val)
+```
+
+# Residualizing regression
+
+```{r}
+library(fixest)
+library(lmtest)
+
+# run residualizing regression
+model_delta_det <- feols(delta_5 ~ delta_logPj_5:Code | industry_year, data = resid_data_clean)
+model_delta_det_sum <- summary(model_delta_det)
+model_delta_det_yearhet <- feols(delta_5 ~ delta_logPj_5:industry_year | industry_year, data = resid_data_clean)
+model_delta_det_yearhet_sum <- summary(model_delta_det_yearhet)
+model_delta_annual <- feols(delta_5 ~ delta_logPj_5:Code | industry_year, data = top_10_annual)
+model_delta_annual_sum <- summary(model_delta_annual)
+
+# store residuals 
+resid_results <- resid_data_clean
+resid_results$delta_5_resid <- model_delta_det$residuals
+
+save(resid_results, model_delta_det_yearhet_sum, model_delta_det_sum, model_delta_annual_sum, file = "../../data/cleaned/resid_results_det.RData")
+```
+
+# Theta results
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+load("../../data/cleaned/resid_results_det.RData")
+
+# theta_it, detailed
+coef_names <- names(coef(model_delta_det_yearhet_sum))
+theta_it <- as.data.frame(model_delta_det_yearhet_sum$coefficients[grep("delta_logPj_5:", coef_names, value = TRUE)])
+colnames(theta_it) <- "beta"
+theta_it$coef <- rownames(theta_it)
+# split Code into 2 columns by :
+theta_it <- separate(theta_it, coef, into = c("term", "Code"), sep = ":")
+theta_it <- separate(theta_it, Code, into = c("Code", "year"), sep = "-")
+theta_it$Code <- gsub("industry_year", "", theta_it$Code)
+theta_it$theta <- 1 - theta_it$beta
+
+# theta_i, detailed
+coef_names <- names(coef(model_delta_det_sum))
+theta_i <- as.data.frame(model_delta_det_sum$coefficients[grep("delta_logPj_5:", coef_names, value = TRUE)])
+colnames(theta_i) <- "beta"
+theta_i$coef <- rownames(theta_i)
+# split Code into 2 columns by :
+theta_i <- separate(theta_i, coef, into = c("term", "Code"), sep = ":")
+theta_i$Code <- gsub("Code", "", theta_i$Code)
+theta_i$theta <- 1 - theta_i$beta
+
+# theta_i, annual
+coef_names <- names(coef(model_delta_annual_sum))
+theta_i_annual <- as.data.frame(model_delta_annual_sum$coefficients[grep("delta_logPj_5:", coef_names, value = TRUE)])
+colnames(theta_i_annual) <- "beta"
+theta_i_annual$coef <- rownames(theta_i_annual)
+# split Code into 2 columns by :
+theta_i_annual <- separate(theta_i_annual, coef, into = c("term", "Code"), sep = ":")
+theta_i_annual$Code <- gsub("Code", "", theta_i_annual$Code)
+theta_i_annual$theta <- 1 - theta_i_annual$beta
+
+
+# stat density theta_i, ggplot
+theta_i_density <- ggplot(theta_i, aes(x = theta)) +
+  geom_density(fill="grey", alpha = 0.5) +
+  theme_minimal() + geom_vline(xintercept = 0, linetype = "dashed") + geom_vline(xintercept = 1, linetype = "dashed") +
+  labs(title = "",
+       x = "Elasticity",
+       y = "") +
+  theme(text = element_text(family = "serif", size = 24)) + xlim(-5,5)
+
+# stat density theta_i, ggplot
+# overlap theta_i, theta_i_annual
+theta_i$source <- "Detailed"
+theta_i_annual$source <- "Summary"
+theta_i_all <- rbind(theta_i, theta_i_annual)
+theta_i_density_bydata <- ggplot(theta_i_all, aes(x = theta, fill = source)) +
+  geom_density(alpha = 0.5) +
+  theme_minimal() + geom_vline(xintercept = 0, linetype = "dashed") + geom_vline(xintercept = 1, linetype = "dashed") +
+  labs(title = "",
+       x = "Elasticity",
+       y = "",
+       fill = "") +
+  theme(legend.position = "top") + xlim(-5,5) +
+  theme(text = element_text(family = "serif", size = 24), legend.position = "bottom")
+
+# stat density theta_it, ggplot
+# fill by year
+theta_it_density <- ggplot(theta_it, aes(x = theta, fill = year)) +
+  geom_density(alpha = 0.5) +
+  theme_minimal() + geom_vline(xintercept = 0, linetype = "dashed") + geom_vline(xintercept = 1, linetype = "dashed") +
+  labs(title = "",
+       x = "Elasticity",
+       y = "",
+       fill = "") +
+  theme(text = element_text(family = "serif", size = 24), legend.position = "bottom") + xlim(-5,5)
+
+ggsave("../../figures/detailed/theta_i_density.pdf", theta_i_density, width = 9, height = 9)
+ggsave("../../figures/detailed/theta_i_density_bydata.pdf", theta_i_density_bydata, width = 9, height = 9)
+ggsave("../../figures/detailed/theta_it_density.pdf", theta_it_density, width = 9, height = 9)
+```
+
+# Residuals LPs
+
+```{r}
+library(lpirfs)
+library(dplyr)
+library(ggplot2)
+
+# load residuals data
+load("../../data/cleaned/resid_results_det.RData")
+# load BEA + Patents data
+load("../../data/cleaned/patent_data_agg_det.RData")
+
+# we have to use Code_patent, to account for multiple Codes mapping to some NAICS 3-digit 
+temp <- resid_results[, c("Code", "year", "delta_5", "delta_5_resid")]
+panel_data <- temp %>%
+  group_by(Code, year) %>%
+  summarise(
+    sum_delta_5 = sum(abs(delta_5), na.rm = TRUE),
+    sum_delta_5_resid = sum(abs(delta_5_resid), na.rm = TRUE)
+  )
+
+panel_data <- merge(panel_data, patent_data_agg, by = c("Code", "year"), all.x = FALSE, all.y = TRUE)
+panel_data <- panel_data[, c("Code", "year", "sum_delta_5", "sum_delta_5_resid", "patents_xi_real", "patents_num", "patents_cites")]
+
+# local projections
+patents_value_lp_og <- lp_lin_panel(panel_data, panel_model = "within", panel_effect = "twoways", robust_cov = "vcovHC", robust_method = "white1", diff_shock = FALSE, endog_data = "sum_delta_5", shock = "patents_xi_real", confint = 1, hor = 10, cumul_mult = FALSE)
+patents_value_lp_resid <- lp_lin_panel(panel_data, panel_model = "within", panel_effect = "twoways", robust_cov = "vcovHC", robust_method = "white1", diff_shock = FALSE, endog_data = "sum_delta_5_resid", shock = "patents_xi_real", confint = 1, hor = 10, cumul_mult = FALSE)
+patents_citations_lp_og <- lp_lin_panel(panel_data, panel_model = "within", panel_effect = "twoways", robust_cov = "vcovHC", robust_method = "white1", diff_shock = FALSE, endog_data = "sum_delta_5", shock = "patents_cites", confint = 1, hor = 10, cumul_mult = FALSE)
+patents_citations_lp_resid <- lp_lin_panel(panel_data, panel_model = "within", panel_effect = "twoways", robust_cov = "vcovHC", robust_method = "white1", diff_shock = FALSE, endog_data = "sum_delta_5_resid", shock = "patents_cites", confint = 1, hor = 10, cumul_mult = FALSE)
+
+# plot and save
+patents_value_lp_both <- graph_lp_both(patents_value_lp_og, patents_value_lp_resid)
+patents_citations_lp_both <- graph_lp_both(patents_citations_lp_og, patents_citations_lp_resid)
+
+patents_value_lp <- graph_lp_one(patents_value_lp_resid, "resid")
+patents_citations_lp <- graph_lp_one(patents_citations_lp_resid, "resid")
+```
+
+# Check with imports
+
+```{r}
+library(readxl)
+library(tidyr)
+library(dplyr)
+
+# load excel import 
+# define import matrix by year
+import_imports <- function(year) {
+  year <- as.character(year)
+  import_matrix <- read_excel("../../data/raw/misc/ImportMatrices_Before_Redefinitions_SUM_1997-2023.xlsx", sheet = year, skip = 5)
+  import_matrix_sub <- import_matrix[c(2:67), c(1:66)]
+  # set first two column names
+  colnames(import_matrix_sub)[1:2] <- c("Commodity", "Commodity Description")
+  # reshape wide, column names are Code
+  import_matrix_sub_long <- import_matrix_sub %>%
+    pivot_longer(cols = -c(Commodity, `Commodity Description`), names_to = "Code", values_to = "import_use") %>%
+    filter(!is.na(import_use))
+  import_matrix_sub_long$year <- year
+  return(import_matrix_sub_long)
+}
+
+# lapply 1997-2023, append
+import_matrix_long <- lapply(1997:2023, import_imports)
+import_matrix_long <- do.call(rbind, import_matrix_long)
+import_matrix_long$import_use <- as.numeric(import_matrix_long$import_use)
+# replace NA with 0
+import_matrix_long$import_use[is.na(import_matrix_long$import_use)] <- 0
+```

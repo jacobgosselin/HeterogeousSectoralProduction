@@ -36,39 +36,15 @@ resid_data_1964_1996_clean$industry_year <- as.factor(paste0(resid_data_1964_199
 resid_data_1998_2023_clean$industry_year <- as.factor(paste0(resid_data_1998_2023_clean$Code, "_", resid_data_1998_2023_clean$year))
 ```
 
-# Price regressions over 3 windows
-```{r}
-library(lmtest)
-library(sandwich)
-library(texreg)
-library(fixest)
-source("helper_fncts.R")
-
-# Get absolute value Pratio and delta_1
-resid_data_1948_1962_clean$abs_delta_logPratio_1 <- abs(resid_data_1948_1962_clean$delta_logPratio_1_II)
-resid_data_1964_1996_clean$abs_delta_logPratio_1 <- abs(resid_data_1964_1996_clean$delta_logPratio_1_II)
-resid_data_1998_2023_clean$abs_delta_logPratio_1 <- abs(resid_data_1998_2023_clean$delta_logPratio_1_II)
-resid_data_1948_1962_clean$abs_delta_1 <- abs(resid_data_1948_1962_clean$delta_1)
-resid_data_1964_1996_clean$abs_delta_1 <- abs(resid_data_1964_1996_clean$delta_1)
-resid_data_1998_2023_clean$abs_delta_1 <- abs(resid_data_1998_2023_clean$delta_1)
-
-# abs Delta abs Price correlation, 5-year groups
-formula <- abs_delta_1 ~ abs_delta_logPratio_1 | industry_year
-price_reg_results_1948_2023 <- lapply(list(resid_data_1948_1962_clean, resid_data_1964_1996_clean, resid_data_1998_2023_clean), function(x) reg_wrapper_feols(x, formula))
-names(price_reg_results_1948_2023) <- c("1947_1962", "1963_1996", "1998_2023")
-
-# texreg results
-texreg(list(price_reg_results_1948_2023[[1]][[1]], price_reg_results_1948_2023[[2]][[1]], price_reg_results_1948_2023[[3]][[1]]), override.se = list(price_reg_results_1948_2023[[1]][[2]], price_reg_results_1948_2023[[2]][[2]], price_reg_results_1948_2023[[3]][[2]]), override.p = list(price_reg_results_1948_2023[[1]][[3]], price_reg_results_1948_2023[[2]][[3]], price_reg_results_1948_2023[[3]][[3]]), stars = c(0.01, 0.05, 0.1), custom.model.names = c("1947-1962", "1963-1996", "1998-2022"), include.rsquared = FALSE, include.adjrs = FALSE, table = FALSE, file = "../tables/PriceReg_1948-2022.tex") 
-```
-
 # Main results (residuals and elasticities)
+
 ```{r}
 library(fixest)
 
 # run residualizing regressions
-model_1948_1962 <- feols(delta_1 ~ delta_logPj_1:industry_year | industry_year, data = resid_data_1948_1962_clean)
-model_1964_1996 <- feols(delta_1 ~ delta_logPj_1:industry_year | industry_year, data = resid_data_1964_1996_clean)
-model_1998_2023 <- feols(delta_1 ~ delta_logPj_1:industry_year | industry_year, data = resid_data_1998_2023_clean)
+model_1948_1962 <- feols(delta_1 ~ delta_logPj_1:Code | industry_year, data = resid_data_1948_1962_clean)
+model_1964_1996 <- feols(delta_1 ~ delta_logPj_1:Code | industry_year, data = resid_data_1964_1996_clean)
+model_1998_2023 <- feols(delta_1 ~ delta_logPj_1:Code | industry_year, data = resid_data_1998_2023_clean)
 # leaving SEs homoskedastic since they are unused
 model_1948_1962_sum <- summary(model_1948_1962)
 model_1964_1996_sum <- summary(model_1964_1996)
@@ -87,7 +63,7 @@ resid_results_1964_1996 <- resid_results_1964_1996[, c("Code", "j", "year", "del
 resid_results_1998_2023 <- resid_results_1998_2023[, c("Code", "j", "year", "delta_1", "delta_1_resid")]
 
 resid_results_all <- rbind(resid_results_1948_1962, resid_results_1964_1996, resid_results_1998_2023)
-# save(model_1948_1962_sum, model_1964_1996_sum, model_1998_2023_sum, resid_results_all, file = "../data/cleaned/resid_results_hist.RData") (too big to save on Github)
+save(model_1948_1962_sum, model_1964_1996_sum, model_1998_2023_sum, resid_results_all, file = "../data/cleaned/resid_results_hist.RData")
 ```
 
 # Local projections
@@ -97,7 +73,7 @@ library(dplyr)
 library(ggplot2)
 
 # load residuals data
-# load("../data/cleaned/resid_results_hist.RData") (too big to save it on Github)
+load("../data/cleaned/resid_results_hist.RData")
 source("helper_fncts.R") #helper fncts
 
 # load BEA + Patents data
@@ -132,6 +108,7 @@ patents_citations_lp <- graph_lp_one(patents_citations_lp_resid, "resid")
 # ggsave("../figures/local_projections/patents_citations_og&resid_hist.pdf", patents_citations_lp_both, width = 9, height = 9)
 ggsave("../figures/local_projections/patents_value_resid_hist.pdf", patents_value_lp, width = 16, height = 9)
 ggsave("../figures/local_projections/patents_citations_resid_hist.pdf", patents_citations_lp, width = 16, height = 9)
+
 ```
 
 # Plot thetas
@@ -143,96 +120,317 @@ library(fixest)
 library(xtable)
 
 # load results
-# load("../data/cleaned/resid_results_hist.RData") (too big to save on Github)
+load("../data/cleaned/resid_results_hist.RData")
 source("helper_fncts.R")
 
-# extract coefficients for each model
-coef_names <- names(coef(model_1948_1962_sum))
-alpha_it_1948_1962 <- as.data.frame(model_1948_1962_sum$coefficients[grep("delta_logPj_1:", coef_names, value = TRUE)])
-colnames(alpha_it_1948_1962) <- "value"
-coef_names <- names(coef(model_1964_1996_sum))
-alpha_it_1964_1996 <- as.data.frame(model_1964_1996_sum$coefficients[grep("delta_logPj_1:", coef_names, value = TRUE)])
-colnames(alpha_it_1964_1996) <- "value"
-coef_names <- names(coef(model_1998_2023_sum))
-alpha_it_1998_2023 <- as.data.frame(model_1998_2023_sum$coefficients[grep("delta_logPj_1:", coef_names, value = TRUE)])
-colnames(alpha_it_1998_2023) <- "value"
+# extract thetas function
+extract_thetas <- function(mod) {
+  coef_names <- names(coef(mod))
+  theta_i <- as.data.frame(mod$coefficients[grep("delta_logPj_1:", coef_names, value = TRUE)])
+  colnames(theta_i) <- "beta"
+  theta_i$coef <- rownames(theta_i)
+  theta_i <- separate(theta_i, coef, into = c("term", "Code"), sep = ":")
+  theta_i$theta <- 1 - theta_i$beta
+  theta_i$se <- mod$se[grep("delta_logPj_1:", coef_names, value = TRUE)]
+  theta_i$Code <- gsub("Code", "", theta_i$Code)
+  return(theta_i)
+}
 
 # combine all coefficients
-alpha_it <- rbind(alpha_it_1948_1962, alpha_it_1964_1996, alpha_it_1998_2023)
-alpha_it$theta <- 1 - alpha_it$value
-theta_it <- data.frame("term" = rownames(alpha_it), "theta" = alpha_it$theta)
-theta_it <- separate(theta_it, term, into = c("term", "Code"), sep = ":")
-theta_it$Code <- gsub("industry_year", "", theta_it$Code)
-theta_it <- separate(theta_it, Code, into = c("Code", "year"), sep = "_")
-theta_it$year <- as.numeric(theta_it$year) - 1 # corresponds to substitution in t-1 to t, so we shift year by 1
-
-theta_collapsed_Year <- theta_it %>%
-  group_by(year) %>%
-  summarise(mean_theta = mean(theta),
-            sd_theta = sd(theta))
-
-theta_collapsed_Code_1947_1962 <- subset(theta_it, year <= 1962) %>%
-  group_by(Code) %>%
-  summarise(mean_theta = mean(theta),
-            sd_theta = sd(theta, na.rm = TRUE))
-
-theta_collapsed_Code_1964_1996 <- subset(theta_it, year > 1964 & year <= 1996) %>% 
-  group_by(Code) %>%
-  summarise(mean_theta = mean(theta),
-            sd_theta = sd(theta))
-
-theta_collapsed_Code_1998_2023 <- subset(theta_it, year > 1997) %>% 
-  group_by(Code) %>%
-  summarise(mean_theta = mean(theta),
-            sd_theta = sd(theta))
-
-all_years <- data.frame(year = seq(min(theta_collapsed_Year$year), max(theta_collapsed_Year$year)))
-theta_collapsed_Year_complete <- merge(all_years, theta_collapsed_Year, by = "year", all.x = TRUE)
-
-# plot by year
-theta_mean_plot_byYear <- ggplot(theta_collapsed_Year_complete, aes(x = year, y = mean_theta)) +
-  geom_line(color = "black") +  # Add a line for the mean
-  # geom_ribbon(aes(ymin = mean_theta - sd_theta, ymax = mean_theta + sd_theta), alpha = 0.2, fill = "black") +  # Add shaded region for SD
-  geom_point() +  # Add points for the mean
-  theme_minimal() + 
-  theme(text = element_text(family = "serif", size = 24)) +
-  labs(x = "Year", y = expression(~theta[i]), title = "") + 
-  geom_hline(yintercept = 0, linetype = "dashed") + geom_hline(yintercept = 1, linetype = "dashed") + ylim(-3,3) +
-  # label every 5-years
-  scale_x_continuous(breaks = seq(1950, 2020, 10))
+theta_i_1948_1962 <- extract_thetas(model_1948_1962)
+theta_i_1964_1996 <- extract_thetas(model_1964_1996)
 
 # plot by Code
-theta_mean_plot_byCode_1947_1962 <- ggplot(theta_collapsed_Code_1947_1962, aes(y = Code, x = mean_theta)) +
-  geom_errorbarh(aes(xmin = mean_theta - sd_theta, xmax = mean_theta + sd_theta), height = 0.2) +
+theta_plot_1947_1962 <- ggplot(theta_i_1948_1962, aes(y = Code, x = theta)) +
+  geom_errorbarh(aes(xmin = theta - 1.65*se, xmax = theta + 1.65*se), height = 0.2) +
   geom_point() +
   theme_minimal() + 
   theme(axis.text.y = element_blank(), text = element_text(family = "serif", size = 24)) +
   labs(x = "1948-1962", y = "", title = "") + 
   geom_vline(xintercept = 0, linetype = "dashed") + 
-  geom_vline(xintercept = 1, linetype = "dashed") + xlim(-3,3)
+  geom_vline(xintercept = 1, linetype = "dashed") + xlim(-2,2)
 
-theta_mean_plot_byCode_1964_1996 <- ggplot(theta_collapsed_Code_1964_1996, aes(y = Code, x = mean_theta)) + 
-  geom_errorbarh(aes(xmin = mean_theta - sd_theta, xmax = mean_theta + sd_theta), height = 0.2) +
+theta_plot_1964_1996 <- ggplot(theta_i_1964_1996, aes(y = Code, x = theta)) + 
+  geom_errorbarh(aes(xmin = theta - 1.65*se, xmax = theta + 1.65*se), height = 0.2) +
   geom_point() +
   theme_minimal() + 
   theme(axis.text.y = element_blank(), text = element_text(family = "serif", size = 24)) +
   labs(x = "1964-1996", y = "", title = "") + 
   geom_vline(xintercept = 0, linetype = "dashed") + 
-  geom_vline(xintercept = 1, linetype = "dashed") + xlim(-3,3)
+  geom_vline(xintercept = 1, linetype = "dashed") + xlim(-2,2)
 
-theta_mean_plot_byCode_1998_2023 <- ggplot(theta_collapsed_Code_1998_2023, aes(y = Code, x = mean_theta)) + 
+library(ggpubr)
+
+theta_plot = ggarrange(theta_plot_1947_1962, theta_plot_1964_1996, ncol = 2, nrow = 1)
+ggsave("../figures/elasticity_est/elasticities_hist.pdf", theta_plot, width = 16, height = 9)
+```
+
+
+
+
+# Old
+
+## Price regressions over 3 windows
+```{r}
+library(lmtest)
+library(sandwich)
+library(texreg)
+library(fixest)
+source("helper_fncts.R")
+
+# Get absolute value Pratio and delta_1
+resid_data_1948_1962_clean$abs_delta_logPratio_1 <- abs(resid_data_1948_1962_clean$delta_logPratio_1_II)
+resid_data_1964_1996_clean$abs_delta_logPratio_1 <- abs(resid_data_1964_1996_clean$delta_logPratio_1_II)
+resid_data_1998_2023_clean$abs_delta_logPratio_1 <- abs(resid_data_1998_2023_clean$delta_logPratio_1_II)
+resid_data_1948_1962_clean$abs_delta_1 <- abs(resid_data_1948_1962_clean$delta_1)
+resid_data_1964_1996_clean$abs_delta_1 <- abs(resid_data_1964_1996_clean$delta_1)
+resid_data_1998_2023_clean$abs_delta_1 <- abs(resid_data_1998_2023_clean$delta_1)
+
+# abs Delta abs Price correlation, 5-year groups
+formula <- abs_delta_1 ~ abs_delta_logPratio_1 | industry_year
+price_reg_results_1948_2023 <- lapply(list(resid_data_1948_1962_clean, resid_data_1964_1996_clean, resid_data_1998_2023_clean), function(x) reg_wrapper_feols(x, formula))
+names(price_reg_results_1948_2023) <- c("1947_1962", "1963_1996", "1998_2023")
+
+# texreg results
+texreg(list(price_reg_results_1948_2023[[1]][[1]], price_reg_results_1948_2023[[2]][[1]], price_reg_results_1948_2023[[3]][[1]]), override.se = list(price_reg_results_1948_2023[[1]][[2]], price_reg_results_1948_2023[[2]][[2]], price_reg_results_1948_2023[[3]][[2]]), override.p = list(price_reg_results_1948_2023[[1]][[3]], price_reg_results_1948_2023[[2]][[3]], price_reg_results_1948_2023[[3]][[3]]), stars = c(0.01, 0.05, 0.1), custom.model.names = c("1947-1962", "1963-1996", "1998-2022"), include.rsquared = FALSE, include.adjrs = FALSE, table = FALSE, file = "../tables/PriceReg_1948-2022.tex") 
+```
+
+## Rolling regressions
+
+```{r}
+library(fixest)
+library(dplyr)
+library(ggplot2)
+library(funtimes)
+library(zoo)
+
+# generate rolling results
+results_rolling_1 = lapply(1950:1960, rolling_regression, data = resid_data_1948_1962_clean, margin = 2)
+results_rolling_2 = lapply(1966:1994, rolling_regression, data = resid_data_1964_1996_clean, margin = 2)
+results_rolling_3 = lapply(2000:2021, rolling_regression, data = resid_data_1998_2023_clean, margin = 2)
+
+# extract theta estimates
+theta_rolling_1 = do.call(rbind, lapply(results_rolling_1, function(x) x$theta))
+theta_rolling_2 = do.call(rbind, lapply(results_rolling_2, function(x) x$theta))
+theta_rolling_3 = do.call(rbind, lapply(results_rolling_3, function(x) x$theta))
+theta_rolling = rbind(theta_rolling_1, theta_rolling_2, theta_rolling_3)
+theta_rolling$upper_theta = theta_rolling$theta + 1.645*theta_rolling$std_err
+theta_rolling$lower_theta = theta_rolling$theta - 1.645*theta_rolling$std_err
+```
+
+
+## Rolling thetas
+
+```{r}
+# collapse mean and sd of theta by year
+theta_collapsed_Year = theta_rolling %>%
+  group_by(year) %>%
+  summarise(mean_theta = mean(theta),
+            sd_theta = sd(theta))
+
+# collapse mean and SD of theta by Code
+theta_collapsed_Code_1 = theta_rolling_1 %>%
+  group_by(Code) %>%
+  summarise(mean_theta = mean(theta),
+            sd_theta = sd(theta))
+
+theta_collapsed_Code_2 = theta_rolling_2 %>%
+  group_by(Code) %>%
+  summarise(mean_theta = mean(theta),
+            sd_theta = sd(theta))
+
+theta_collapsed_Code_3 = theta_rolling_3 %>%
+  group_by(Code) %>%
+  summarise(mean_theta = mean(theta),
+            sd_theta = sd(theta))
+
+# Plots
+
+# merge with complete year grid to leave blank missing years
+all_years <- data.frame(year = seq(min(theta_collapsed_Year$year), max(theta_collapsed_Year$year)))
+theta_collapsed_Year_complete <- merge(all_years, theta_collapsed_Year, by = "year", all.x = TRUE)
+theta_mean_SD_plot_byYear <- ggplot(theta_collapsed_Year_complete, aes(x = year, y = mean_theta)) +
+  geom_line(color = "black") +  # Add a line for the mean
+  geom_ribbon(aes(ymin = mean_theta - sd_theta, ymax = mean_theta + sd_theta), alpha = 0.2, fill = "black") +  # Add shaded region for SD
+  geom_point() +  # Add points for the mean
+  theme_minimal() + 
+  theme(text = element_text(family = "serif", size = 24)) +
+  labs(x = "Year", y = expression(~theta[i]), title = "") + 
+  geom_hline(yintercept = 0, linetype = "dashed") + geom_hline(yintercept = 1, linetype = "dashed")
+
+theta_mean_SD_plot_byCode_1 <- ggplot(theta_collapsed_Code_1, aes(y = Code, x = mean_theta)) +
   geom_errorbarh(aes(xmin = mean_theta - sd_theta, xmax = mean_theta + sd_theta), height = 0.2) +
   geom_point() +
   theme_minimal() + 
   theme(axis.text.y = element_blank(), text = element_text(family = "serif", size = 24)) +
-  labs(x = "1998-2023", y = "", title = "") + 
+  labs(y = "", x = expression(~theta[i]), title = "") + 
   geom_vline(xintercept = 0, linetype = "dashed") + 
-  geom_vline(xintercept = 1, linetype = "dashed") + xlim(-3,3)
+  geom_vline(xintercept = 1, linetype = "dashed")
 
-library(ggpubr)
+theta_mean_SD_plot_byCode_2 <- ggplot(theta_collapsed_Code_2, aes(y = Code, x = mean_theta)) + 
+  geom_errorbarh(aes(xmin = mean_theta - sd_theta, xmax = mean_theta + sd_theta), height = 0.2) +
+  geom_point() +
+  theme_minimal() + 
+  theme(axis.text.y = element_blank(), text = element_text(family = "serif", size = 24)) +
+  labs(y = "", x = expression(~theta[i]), title = "") + 
+  geom_vline(xintercept = 0, linetype = "dashed") + 
+  geom_vline(xintercept = 1, linetype = "dashed")
 
-theta_mean_plot_byCode = ggarrange(theta_mean_plot_byCode_1947_1962, theta_mean_plot_byCode_1964_1996, theta_mean_plot_byCode_1998_2023, ncol = 3, nrow = 1)
-ggsave("../figures/elasticity_est/elasticity_byCode_hist.pdf", theta_mean_plot_byCode, width = 16, height = 9)
-ggsave("../figures/elasticity_est/elasticity_byYear_hist.pdf", theta_mean_plot_byYear, width = 16, height = 9)
+theta_mean_SD_plot_byCode_3 <- ggplot(theta_collapsed_Code_3, aes(y = Code, x = mean_theta)) + 
+  geom_errorbarh(aes(xmin = mean_theta - sd_theta, xmax = mean_theta + sd_theta), height = 0.2) +
+  geom_point() +
+  theme_minimal() + 
+  theme(axis.text.y = element_blank(), text = element_text(family = "serif", size = 24)) +
+  labs(y = "", x = expression(~theta[i]), title = "") + 
+  geom_vline(xintercept = 0, linetype = "dashed") + 
+  geom_vline(xintercept = 1, linetype = "dashed")
+
+ggsave("../figures/elasticity_est/elasticity_byyear_hist_rolling.pdf", theta_mean_SD_plot_byYear, width = 16, height = 9)
+ggsave("../figures/elasticity_est/elasticity_bycode_1_hist_rolling.pdf", theta_mean_SD_plot_byCode_1, width = 9, height = 9)
+ggsave("../figures/elasticity_est/elasticity_bycode_2_hist_rolling.pdf", theta_mean_SD_plot_byCode_2, width = 9, height = 9)
+ggsave("../figures/elasticity_est/elasticity_bycode_3_hist_rolling.pdf", theta_mean_SD_plot_byCode_3, width = 9, height = 9)
 ```
 
+## Test changing elasticity
+```{r}
+
+# make dataframe of first quartile, median, third quartile for delta_theta and theta
+quartiles <- c(0.25, 0.5, 0.75)
+alpha_it_quartiles <- as.data.frame(apply(alpha_it, 2, quantile, probs = quartiles))
+beta_it_quartiles <- as.data.frame(apply(beta_it, 2, quantile, probs = quartiles))
+merged_quartiles <- rbind(t(alpha_it_quartiles), t(beta_it_quartiles))
+
+# round values to 2 decimal places
+merged_quartiles <- round(merged_quartiles, 2)
+rownames(merged_quartiles) <- c("$\\alpha_{it}$", "$\\beta_{it}$")
+colnames(merged_quartiles) <- c("1st Quartile", "Median", "3rd Quartile")
+
+merged_quartiles_table <- xtable(merged_quartiles)
+print(merged_quartiles_table, floating = FALSE, file = "../tables/elasticity_quartiles_Int.tex", sanitize.text.function=function(x){x})
+
+# plot overlapping histograms of delta_theta and theta
+alpha_it$coef <- "alpha_it"
+beta_it$coef <- "beta_it"
+names(alpha_it) <- c("value", "coef")
+names(beta_it) <- c("value", "coef")
+combined <- rbind(alpha_it, beta_it)
+
+theta_hist <- ggplot(combined, aes(x = value, fill = coef)) +
+  geom_histogram(position = "identity", alpha = .25, binwidth = .1) +
+  theme_minimal() +
+  labs(title = "", x = "", y = "Frequency", fill = "") +
+  theme(text = element_text(family = "serif", size = 32), legend.position = "bottom") + coord_cartesian(xlim = c(-2, 2)) +
+  scale_fill_manual(values = c("red", "blue"), labels = c(expression(alpha[italic("it")]), expression(beta[italic("it")]))) 
+
+ggsave("../figures/histograms/elasticity_coef_hist.pdf", theta_hist, width = 9, height = 9)
+```
+
+## 2.2: Test residuals (Local Projections)
+```{r}
+library(lpirfs)
+
+# load BEA + Patents data
+load("../data/cleaned/patent_data_agg.RData")
+load("../data/cleaned/summary_naics_crosswalk.RData")
+
+# we have to use Code_patent, to account for multiple Codes mapping to some NAICS 3-digit 
+temp <- resid_ests_all_long[, c("Code", "year", "resid")]
+temp <- merge(temp, summary_naics_crosswalk, by = "Code")
+panel_data <- temp %>%
+  group_by(Code_patent, year) %>%
+  summarise(
+    sum_delta_1_resid = sum(abs(resid), na.rm = TRUE)
+  )
+
+panel_data <- merge(panel_data, patent_data_agg, by = c("Code_patent", "year"), all.x = TRUE, all.y = FALSE)
+panel_data <- panel_data[, c("Code_patent", "year", "sum_delta_1_resid", "patents_xi_real", "patents_num", "patents_cites")]
+
+# local projections
+patents_lp_resid <- lp_lin_panel(panel_data, panel_model = "within", panel_effect = "twoways", robust_cov = "vcovHC", robust_cluster = "group", diff_shock = FALSE, endog_data = "sum_delta_1_resid", shock = "patents_xi_real", confint = 1.65, hor = 15, cumul_mult = FALSE)
+patents_lp_resid_alt <- lp_lin_panel(panel_data, panel_model = "within", panel_effect = "twoways", robust_cov = "vcovHC", robust_cluster = "group", diff_shock = FALSE, endog_data = "sum_delta_1_resid", shock = "patents_cites", confint = 1.65, hor = 15, cumul_mult = FALSE)
+
+# plot and save
+patents_lp <- graph_lp_one(patents_lp_resid, "resid")
+patents_lp_alt <- graph_lp_one(patents_lp_resid_alt, "resid")
+ggsave("../figures/local_projections/extended_sample/patents_lp_resid_theta5_extended.pdf", patents_lp, width = 9, height = 9)
+ggsave("../figures/local_projections/patents_lp_resid_theta5_alt_extended.pdf", patents_lp_alt, width = 16, height = 9)
+```
+
+## 2.3: Plot elasticities
+```{r}
+# elasticity plot function
+plot_elast_coef <- function(data) {
+  year = unique(data$year_group)
+  plot <- ggplot(data, aes(x = term, y = 0)) +
+  geom_errorbar(aes(ymin = lower_theta, ymax = upper_theta), width = 0.2) +
+  geom_point(aes(y = theta)) +
+  labs(x = expression(~theta[i]),
+       y = "Confidence Interval",
+       color = "Includes Zero", title = year) + theme_minimal() +
+  theme(axis.text.x = element_blank(), text = element_text(family = "serif", size = 24), legend.position = "none") +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    geom_hline(yintercept = 1, linetype = "dashed")
+  return(plot)
+}
+
+# apply theta_ests list
+elasticity_coef_plots <- lapply(split(theta_ests_all_long, theta_ests_all_long$year_group), plot_elast_coef)
+# ggsave each item of list as "elasticity_est_'item'.pdf", where "item" is the name of the item in the list
+for (i in 1:length(elasticity_coef_plots)) {
+  ggsave(paste0("../figures/elasticity_est/extended_sample/elasticity_est_", names(elasticity_coef_plots)[i], ".pdf"), elasticity_coef_plots[[i]], width = 16, height = 9)
+}
+
+# get mean elasticity in 10 year groups
+resid_data_1947_1962_clean$year_group_10 <- cut(resid_data_1947_1962_clean$year, breaks = seq(1948, 1962, 10))
+resid_data_1963_1996_clean$year_group_10 <- cut(resid_data_1963_1996_clean$year, breaks = seq(1964, 1996, 10))
+resid_data_1997_2023_clean$year_group_10 <- cut(resid_data_1997_2023_clean$year, breaks = seq(1998, 2022, 10))
+
+# lapply splitting by 10 year groups
+resid_data_clean_all <- rbind(resid_data_1947_1962_clean, resid_data_1963_1996_clean, resid_data_1997_2023_clean)
+mean_elasticity_10yr <- lapply(split(resid_data_clean_all, resid_data_clean_all$year_group_10), get_mean_elasticity)
+mean_elasticity_10yr_df <- do.call(rbind, mean_elasticity_10yr)
+
+# plot theta with upper and lower bounds across groups
+plot_mean_elast <- ggplot(mean_elasticity_10yr_df, aes(x = year_group, y = theta)) +
+  geom_errorbar(aes(ymin = lower_theta, ymax = upper_theta), width = 0.2) +
+  geom_point() +
+  labs(x = "", y = expression(~theta[i]), title = "") +
+  theme_minimal() + theme(text = element_text(family = "serif", size = 24))
+
+ggsave("../figures/elasticity_est/extended_sample/mean_elasticity_10yr_1947-2022.pdf", plot_mean_elast, width = 16, height = 9)
+```
+
+```{r}
+
+# Create 5-year groups
+resid_data_1947_1962_clean$year_group <- cut(resid_data_1947_1962_clean$year, breaks = seq(1947, 1962, 5))
+resid_data_1963_1996_clean$year_group <- cut(resid_data_1963_1996_clean$year, breaks = seq(1963, 1996, 5))
+resid_data_1997_2023_clean$year_group <- cut(resid_data_1997_2023_clean$year, breaks = seq(1997, 2022, 5))
+
+# lapply over groups
+resid_results_1947_1962_grouped <- lapply(split(resid_data_1947_1962_clean, resid_data_1947_1962_clean$year_group), get_resid_elast)
+resid_results_1963_1996_grouped <- lapply(split(resid_data_1963_1996_clean, resid_data_1963_1996_clean$year_group), get_resid_elast)
+resid_results_1997_2023_grouped <- lapply(split(resid_data_1997_2023_clean, resid_data_1997_2023_clean$year_group), get_resid_elast)
+  
+# extract the resid_ests from each list
+resid_ests_1947_1962 <- lapply(resid_results_1947_1962_grouped, function(x) x$resid_ests)
+resid_ests_1963_1996 <- lapply(resid_results_1963_1996_grouped, function(x) x$resid_ests)
+resid_ests_1997_2023 <- lapply(resid_results_1997_2023_grouped, function(x) x$resid_ests)
+
+# rbind resids
+resid_ests_1947_1962_long <- do.call(rbind, resid_ests_1947_1962)
+resid_ests_1963_1996_long <- do.call(rbind, resid_ests_1963_1996)
+resid_ests_1997_2023_long <- do.call(rbind, resid_ests_1997_2023)
+resid_ests_all_long <- rbind(resid_ests_1947_1962_long, resid_ests_1963_1996_long, resid_ests_1997_2023_long)
+
+# extract theta_ests from each list
+theta_ests_1947_1962 <- lapply(resid_results_1947_1962_grouped, function(x) x$theta_est)
+theta_ests_1963_1996 <- lapply(resid_results_1963_1996_grouped, function(x) x$theta_est)
+theta_ests_1997_2023 <- lapply(resid_results_1997_2023_grouped, function(x) x$theta_est)
+
+# rbind theta_ests
+theta_ests_1947_1962_long <- do.call(rbind, theta_ests_1947_1962)
+theta_ests_1963_1996_long <- do.call(rbind, theta_ests_1963_1996)
+theta_ests_1997_2023_long <- do.call(rbind, theta_ests_1997_2023)
+theta_ests_all_long <- rbind(theta_ests_1947_1962_long, theta_ests_1963_1996_long, theta_ests_1997_2023_long)
+```

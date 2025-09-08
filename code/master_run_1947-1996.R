@@ -10,7 +10,7 @@ library(readxl)
 
 pull_api = 0 # set to 1 to clean raw IO data
 if(pull_api == 1) {
-  # source("code/cleaning/api_pull_BEA.R") (can't include in public repo)
+  source("code/cleaning/api_pull_BEA.R")
   source("code/cleaning/api_pull_Compustat.R")
 }
 

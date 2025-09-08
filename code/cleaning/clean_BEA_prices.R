@@ -29,6 +29,7 @@ output_price_data$year <- as.numeric(output_price_data$year)
 output_price_data <- output_price_data %>%
   group_by(Code) %>%
   mutate(price = price / price[year == 1997])
+save(output_price_data, file = "data/cleaned/BEA_price_data.RData")
 
 II_price_data <- II_price_data_raw
 II_price_data$Code <- II_price_data$Industry

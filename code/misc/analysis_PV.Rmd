@@ -1,0 +1,64 @@
+---
+title: "BEA IO Analysis, pt0 (descriptive)"
+author: "Jacob Toner Gosselin"
+---
+
+# 0: Load data and functions
+
+```{r}
+# load A data
+load("../data/cleaned/code_desc_crosswalk.RData")
+exclude = code_desc_crosswalk[67:nrow(code_desc_crosswalk), ] 
+keep = subset(code_desc_crosswalk, !(Code %in% exclude$Code))
+load("../data/cleaned/resid_data_1998_2023.RData")
+              
+# load helper fncts
+# source("helper_fncts.R")
+```
+
+# 1: Measuring change
+
+```{r}
+# check exp-share change
+library(dplyr)
+library(tidyr)
+
+cum_sum_j <- resid_data_1998_2023 %>%
+  group_by(j) %>%
+  summarise(delta_exp = sum(delta_1, na.rm = TRUE))
+
+
+load("../data/cleaned/BEA_price_data.RData")
+load("../data/cleaned/structural/calibration_data.RData")
+# take column sums of cumulative_delta_logOmega_wide
+total_delta_logOmega <- as.data.frame(colSums(cumulative_delta_logOmega_wide, na.rm = TRUE))
+
+med_price_byyear <- output_price_data %>%
+  group_by(year) %>%
+  summarise(price = median(price, na.rm = TRUE),
+            Sector = "Median") %>%
+  select(year, Sector, price)
+
+data_price_byyear <- output_price_data %>% 
+  filter(Code == 514) %>% 
+  mutate(Sector = "Data processing") %>% 
+  ungroup() %>% 
+  select(year, Sector, price)
+
+plot_data <- rbind(med_price_byyear, data_price_byyear)
+
+# line plots by Code
+# dashed line for Median, solid for 514
+library(ggplot2)
+
+plot <- ggplot(plot_data, aes(x = year, y = price, color = Sector)) +
+  geom_line() +
+  geom_point() +
+  scale_color_manual(values = c("Median" = "black", "Data processing" = "salmon")) +
+  labs(title = "",
+       x = "Year",
+       y = "Price") +
+  theme_minimal() + theme(text = element_text(family = "serif", size = 24), legend.position = "bottom") 
+
+ggsave("../figures/misc/CV_price_ex.pdf", plot, width = 12, height = 8)
+```

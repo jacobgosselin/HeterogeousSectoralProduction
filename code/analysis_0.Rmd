@@ -1,0 +1,121 @@
+---
+title: "BEA IO Analysis, pt0 (descriptive)"
+author: "Jacob Toner Gosselin"
+---
+
+# 0: Load data and functions
+
+```{r}
+# load A data
+load("../data/cleaned/A_byyear_1997_2023_api.RData")
+load("../data/cleaned/code_crosswalk.RData")
+exclude = code_crosswalk[67:nrow(code_crosswalk), ] 
+keep = subset(code_crosswalk, !(Code %in% exclude$Code))
+              
+# load helper fncts
+source("helper_fncts.R")
+```
+
+# 1: Measuring change
+
+## 1.1: generate deltas
+
+```{r}
+Adelta1_byyear_1998_2023 <- lapply(1998:2023, gen_delta, list = A_byyear_1997_2023, horizon = 1)
+names(Adelta1_byyear_1998_2023) <- as.character(1998:2023)
+Adelta5_byyear_2002_2023 <- lapply(2002:2023, gen_delta, list = A_byyear_1997_2023, horizon = 5)
+names(Adelta5_byyear_2002_2023) <- as.character(2002:2023)
+Adelta10_byyear_2007_2023 <- lapply(2007:2023, gen_delta, list = A_byyear_1997_2023, horizon = 10)
+names(Adelta10_byyear_2007_2023) <- as.character(2007:2023)
+```
+
+# 2: Plotting changes
+
+## 2.1: Histograms of changes, A
+
+```{r}
+library(ggplot2)
+
+#######
+# all changes (A) 
+#######
+
+# make A_delta1_byyear long list, with lapply
+Adelta1_long_1998_2023 <- make_mat_list_long(Adelta1_byyear_1998_2023)
+Adelta1_long_1998_2023$horizon <- "1yr"
+Adelta1_long_1998_2023$delta <- Adelta1_long_1998_2023$val
+
+# make A_delta5_byyear long list, with lapply
+Adelta5_long_2002_2023 <- make_mat_list_long(Adelta5_byyear_2002_2023)
+Adelta5_long_2002_2023$horizon <- "5yrs"
+Adelta5_long_2002_2023$delta <- Adelta5_long_2002_2023$val
+
+# make A_delta10_byyear long list, with lapply
+Adelta10_long_2007_2023 <- make_mat_list_long(Adelta10_byyear_2007_2023)
+Adelta10_long_2007_2023$horizon <- "10yrs"
+Adelta10_long_2007_2023$delta <- Adelta10_long_2007_2023$val
+
+# append dataframes delta5 and delta10
+Adelta_long_1998_2023 <-  rbind(Adelta1_long_1998_2023, Adelta5_long_2002_2023, Adelta10_long_2007_2023)
+
+########
+# Sums (A)
+########
+
+# make A_delta_sum_abs_byyear long list
+Adelta1_sum_abs_byyear_1998_2023 <- lapply(Adelta1_byyear_1998_2023, sum_abs_changes)
+names(Adelta1_sum_abs_byyear_1998_2023) <- as.character(1998:2022)
+Adelta1_sum_abs_long_1998_2023 <- do.call(rbind, Adelta1_sum_abs_byyear_1998_2023)
+Adelta1_sum_abs_long_1998_2023$horizon <- "1yr"
+Adelta5_sums_abs_byyear_2002_2023 <- lapply(Adelta5_byyear_2002_2023, sum_abs_changes)
+names(Adelta5_sums_abs_byyear_2002_2023) <- as.character(2002:2022)
+Adelta5_sums_abs_long_2002_2023 <- do.call(rbind, Adelta5_sums_abs_byyear_2002_2023)
+Adelta5_sums_abs_long_2002_2023$horizon <- "5yrs"
+Adelta10_sums_abs_byyear_2007_2023 <- lapply(Adelta10_byyear_2007_2023, sum_abs_changes)
+names(Adelta10_sums_abs_byyear_2007_2023) <- as.character(2007:2022)
+Adelta10_sums_abs_long_2007_2023 <- do.call(rbind, Adelta10_sums_abs_byyear_2007_2023)
+Adelta10_sums_abs_long_2007_2023$horizon <- "10yrs"
+
+# append dataframes delta5 and delta10
+Adelta_sums_abs_long_1998_2023 <-  rbind(Adelta1_sum_abs_long_1998_2023, Adelta5_sums_abs_long_2002_2023, Adelta10_sums_abs_long_2007_2023)
+Adelta_sums_abs_long_1998_2023$delta <- Adelta_sums_abs_long_1998_2023$sum_abs
+
+#######
+# Plotting
+#######
+# factor horizon, order 1yr, 5yrs, 10yrs
+Adelta_long_1998_2023$horizon <- factor(Adelta_long_1998_2023$horizon, levels = c("1yr", "5yrs", "10yrs"))
+Adelta_sums_abs_long_1998_2023$horizon <- factor(Adelta_sums_abs_long_1998_2023$horizon, levels = c("1yr", "5yrs", "10yrs"))
+
+
+all_1yr <- gen_hist(subset(Adelta_long_1998_2023, Adelta_long_1998_2023$horizon =="1yr"), .01, expression(~Delta * a[ij]))
+all_5yr <- gen_hist(subset(Adelta_long_1998_2023, Adelta_long_1998_2023$horizon !="10yrs"), .01, expression(~Delta * a[ij]))
+all_10yr <- gen_hist(Adelta_long_1998_2023, .01, expression(~Delta * a[ij]))
+
+sum_1yr <- gen_hist(subset(Adelta_sums_abs_long_1998_2023, Adelta_sums_abs_long_1998_2023$horizon =="1yr"), 0, expression(sum(abs(~Delta*a[ij]))))
+sum_5yr <- gen_hist(subset(Adelta_sums_abs_long_1998_2023, Adelta_sums_abs_long_1998_2023$horizon !="10yrs"), 0, expression(sum(abs(~Delta*a[ij]))))
+sum_10yr <- gen_hist(Adelta_sums_abs_long_1998_2023, 0, expression(sum(abs(~Delta*a[ij]))))
+
+ggsave("../figures/histograms/A_all_2002_2023_1.pdf", plot = all_1yr, width = 16, height = 9)
+ggsave("../figures/histograms/A_all_2002_2023_2.pdf", plot = all_5yr, width = 16, height = 9)
+ggsave("../figures/histograms/A_all_2002_2023_3.pdf", plot = all_10yr, width = 16, height = 9)
+
+ggsave("../figures/histograms/A_sum_1998_2023_1.pdf", plot = sum_1yr, width = 16, height = 9)
+ggsave("../figures/histograms/A_sum_1998_2023_2.pdf", plot = sum_5yr, width = 16, height = 9)
+ggsave("../figures/histograms/A_sum_1998_2023_3.pdf", plot = sum_10yr, width = 16, height = 9)
+```
+
+## 2.3: X-Y plots of changes
+
+```{r}
+# load required libraries
+library(ggplot2)
+library(ggpubr)
+library(tidyr)
+library(scales)
+
+XY_example <- XY_change(A_byyear_1997_2023[['1997']], A_byyear_1997_2023[['1998']], A_byyear_1997_2023[['2002']], A_byyear_1997_2023[['2017']], "t+1", "t+5", "t+10")
+ggsave("../figures/XY_plots/XY_example_1.pdf", plot = XY_example[[1]], width = 16, height = 9)
+ggsave("../figures/XY_plots/XY_example_2.pdf", plot = XY_example[[2]], width = 16, height = 9)
+ggsave("../figures/XY_plots/XY_example_3.pdf", plot = XY_example[[3]], width = 16, height = 9)
+```

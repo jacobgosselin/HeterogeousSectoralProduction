@@ -86,7 +86,7 @@ def trivial(X):
     # This is a placeholder example
     return 1 
 
-def eqm_solver(A, beta, Omega, alpha, epsilon, theta, sigma, L, P_guess, Y_guess, reallocate=False, return_L = False):
+def eqm_solver(A, beta, Omega, alpha, epsilon, theta, sigma, L, P_guess, Y_guess, reallocate=False, return_L = False, return_W = False):
 
     # Define the initial guess
     init = np.concatenate((P_guess, Y_guess))
@@ -116,7 +116,7 @@ def eqm_solver(A, beta, Omega, alpha, epsilon, theta, sigma, L, P_guess, Y_guess
         x0=init,
         method='SLSQP',
         constraints=constraints,
-        options={'disp': False, 'maxiter': 250}
+        options={'disp': False, 'maxiter': 1000}
     )
 
     # Extract the solution and exit flag
@@ -124,6 +124,10 @@ def eqm_solver(A, beta, Omega, alpha, epsilon, theta, sigma, L, P_guess, Y_guess
     exitfl = result.success
     # if no success in optimization, print "NO CONVERGENCE"
     if not exitfl:
+        # print the exit ftol
+        print("Exit flag:", result.message)
+        print("Exit status:", result.status)
+        print("Exit function value:", result.fun)
         print("NO CONVERGENCE")
         return None, None
     else:
@@ -132,15 +136,17 @@ def eqm_solver(A, beta, Omega, alpha, epsilon, theta, sigma, L, P_guess, Y_guess
     # Recover GDP
     p_eqm = Soln[:len(alpha)]
     y_eqm = Soln[len(alpha):2*len(alpha)]
-    w_eqm = p_eqm * (A**((epsilon-1)/epsilon)) * (alpha**(1/epsilon)) * (y_eqm**(1/epsilon)) * (1/L)**(1/epsilon)
     if reallocate:
         C_eqm = (beta@(p_eqm**(1-sigma)))**(1/(sigma-1))
-        L_eqm = (p_eqm * (A**((epsilon-1)/epsilon)) * (alpha**(1/epsilon)) * (y_eqm**(1/epsilon)))**(epsilon)
+        L_eqm = (p_eqm * (A**((epsilon-1)/epsilon)) * (alpha**(1/epsilon)) * (y_eqm**(1/epsilon)))**(epsilon)  
+        w_eqm = p_eqm * (A**((epsilon-1)/epsilon)) * (alpha**(1/epsilon)) * (y_eqm**(1/epsilon)) * (1/L_eqm)**(1/epsilon)
     else:
         w_eqm = p_eqm * (A**((epsilon-1)/epsilon)) * (alpha**(1/epsilon)) * (y_eqm**(1/epsilon)) * (1/L)**(1/epsilon)
         C_eqm = w_eqm@L
     if return_L:
         return L_eqm 
+    if return_W:
+        return w_eqm
     else: 
         return C_eqm, y_eqm
     
@@ -148,9 +154,9 @@ def eqm_solver(A, beta, Omega, alpha, epsilon, theta, sigma, L, P_guess, Y_guess
 # Functions for simulating equilibrium with TFP shocks
 ####################################################################################################
 
-def draw_multivariate_normal(cov_matrix, num_samples, seed=None):
+def draw_multivariate_normal(mean_vector, cov_matrix, num_samples, seed=None):
     rng = np.random.default_rng(seed)
-    mean_vector = np.zeros(cov_matrix.shape[0]) # Mean vector (zero mean)
+    # mean_vector = np.zeros(cov_matrix.shape[0]) # Mean vector (zero mean)
     samples = multivariate_normal.rvs(mean=mean_vector, cov=(cov_matrix), size=num_samples, random_state=rng) # Generate samples from the multivariate normal distribution using the RNG
     return samples
 
