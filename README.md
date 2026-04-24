@@ -1,7 +1,5 @@
 # Replication Package: Sector-Specific Substitution and the Effect of Sectoral Shocks
 
-**Author:** Jacob Toner Gosselin (Northwestern University)
-
 This repository contains the code and data to replicate the results in "Sector-Specific Substitution and the Effect of Sectoral Shocks." 
 
 ## Main Output
