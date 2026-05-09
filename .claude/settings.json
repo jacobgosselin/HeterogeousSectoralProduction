@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la /Users/jacobgosselin/Documents)",
+      "Read(//Users/jacobgosselin/Documents/**)",
+      "Bash(find /Users/jacobgosselin -type d -name \"*HeterogeousSectoral*\" 2>/dev/null)",
+      "Read(//Users/jacobgosselin/**)",
+      "Bash(find /Users/jacobgosselin -type d -name \"GitHub\" 2>/dev/null)"
+    ]
+  }
+}
