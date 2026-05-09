@@ -28,7 +28,7 @@ Scripts are numbered in the order they should be run. Comments within each file 
 | `3b_quant_results.py` | Python | Reads shock results and produces tables and figures for the open-economy calibrations (main and common-theta). |
 | `3c_quant_results_closed.py` | Python | Same as `3b` but for the closed-economy calibrations. |
 | `4_MISC_empirical_results.R` | R | Additional empirical results and robustness checks (e.g., Atalay comparison). |
-| `4_MISC_stylized_ex.ipynb` | Python (Jupyter) | Stylized examples illustrating model mechanics. |
+| `4_MISC_stylized_ex.ipynb` | Python | Stylized examples illustrating model mechanics. |
 
 ### Helper Functions (`helper_fncts/`)
 
