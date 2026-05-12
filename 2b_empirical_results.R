@@ -86,6 +86,22 @@ plot_main <- ggplot(plot_main_data, aes(x = as.factor(i_lab), y = theta_i, color
                      labels = c("Main" = "Sector-Specific", "Uniform" = "Uniform")) +
   coord_cartesian(ylim = c(-.5, 3.5)) 
 
+plot_main_slides <- plot_main + theme(text = element_text(size = 32))
+
+# plot main highlighting 6 industries: 211, 324, 481, 482, 483, 484 (make those ones red)
+plot_main_highlight <- ggplot(plot_main_data %>% filter(model == "Main"), aes(x = as.factor(i_lab), y = theta_i, color = (i %in% c("211", "324", "481", "482", "483", "484")))) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = theta_i - 1.65*se_robust, ymax = theta_i + 1.65*se_robust), width = 1) +
+  theme_minimal() +
+  labs(title = "", x = "Industry", y = "Elasticity") +
+  theme(text = element_text(family = "serif", size = 32),
+        legend.position = "bottom",
+        axis.text.x = element_blank()) +
+  scale_color_manual(values = c("FALSE" = two_colors[1], "TRUE" = two_colors[2]), 
+                     breaks = c("FALSE", "TRUE"),
+                     labels = c("FALSE" = "Other Industries", "TRUE" = "Oil and Gas Subgroup")) +
+  coord_cartesian(ylim = c(-.5, 3.5))
+
 plot_theta_biased_data <- est_theta %>% 
   filter(model == "Main" | model == "Biased") %>%
   group_by(i) %>%
@@ -111,10 +127,16 @@ plot_theta_biased <- ggplot(plot_theta_biased_data, aes(x = as.factor(i_lab), y 
   scale_color_manual(values = c("Main" = two_colors[1], "Biased" = two_colors[2]),
                      labels = c("Main", "Biased")) +
   coord_cartesian(ylim = c(-.5, 3.5))
+
+plot_theta_biased_slides <- plot_theta_biased + theme(text = element_text(size = 32))
   
 # Save plots
 ggsave(file.path(out_dir, "figures/theta_i_main.pdf"), plot = plot_main, width = 8, height = 6)
+ggsave(file.path(out_dir, "figures/theta_i_main_slides.pdf"), plot = plot_main_slides, width = 10, height = 10)
+ggsave(file.path(out_dir, "figures/theta_i_main_highlight_slides.pdf"), plot = plot_main_highlight, width = 10, height = 10)
 ggsave(file.path(out_dir, "figures/theta_i_biased.pdf"), plot = plot_theta_biased, width = 8, height = 6)
+ggsave(file.path(out_dir, "figures/theta_i_biased_slides.pdf"), plot = plot_theta_biased_slides, width = 10, height = 10)
+
   
 # write Latex long table
 # Create table with Industry, Estimate (Main), SE, Biased Estimate, Biased SE
@@ -131,7 +153,7 @@ theta_table_data <- est_theta %>%
 # Get Uniform theta estimate and Uniform Armington (gamma) estimate
 uniform_est <- est_theta %>% filter(model == "Uniform") %>%
   ungroup() %>% slice(1) %>% select(theta_i, se_robust)
-armington_est <- est_gamma %>% filter(model == "Uniform") %>%
+armington_est <- est_gamma %>% filter(model == "Main") %>%
   ungroup() %>% slice(1) %>% select(gamma_j, se_robust)
 
 # Build LaTeX longtable

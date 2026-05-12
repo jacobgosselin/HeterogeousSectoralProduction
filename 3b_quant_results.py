@@ -51,12 +51,12 @@ print("Generating severe domestic productivity shocks table...")
 
 severe_shocks = pd.read_csv(os.path.join(out_dir, 'clean_data/severe_shocks_results.csv'), index_col=0)
 
-def truncate_industry_50(name):
-    return name[:50] + '...' if len(name) > 50 else name
+def truncate_industry(name, max_len=50):
+    return name[:max_len] + '...' if len(name) > max_len else name
 
 def create_table(df):
     table = pd.DataFrame()
-    table['Industry'] = df['Industry'].apply(truncate_industry_50)
+    table['Industry'] = df['Industry'].apply(lambda x: truncate_industry(x, max_len=50))
     table['Main'] = ((df['main'] - 1) * 100).apply(lambda x: f'{x:.2f}\\%')
     table['Uniform'] = ((df['common_theta'] - 1) * 100).apply(lambda x: f'{x:.2f}\\%')
     table['Change'] = (df['main'] - df['common_theta']) * 100
@@ -80,6 +80,22 @@ lines.insert(12, r'\midrule')
 latex_table = '\n'.join(lines)
 with open(os.path.join(out_dir, "tables/severe_shocks_GDP.tex"), "w") as f:
     f.write(latex_table)
+
+# truncate at 30 for slides and rename columns Uniform and Change for better readability on slides
+combined_table['Industry'] = combined_table['Industry'].apply(lambda x: truncate_industry(x, max_len=30))
+combined_table.rename(columns={'Uniform': 'Unif.', 'Change': 'Diff.'}, inplace=True)
+combined_table_tex_short = combined_table.to_latex(index=False, escape=False)
+lines_short = combined_table_tex_short.splitlines()
+lines_short.insert(4, r'\midrule')
+lines_short.insert(5, r'\multicolumn{2}{l}{\textbf{Smaller GDP loss}} \\')
+lines_short.insert(6, r'\midrule')
+lines_short.insert(10, r'\midrule')
+lines_short.insert(11, r'\multicolumn{2}{l}{\textbf{Larger GDP loss}} \\')
+lines_short.insert(12, r'\midrule')
+latex_table_short = '\n'.join(lines_short)
+with open(os.path.join(out_dir, "tables/severe_shocks_GDP_slides.tex"), "w") as f:
+    f.write(latex_table_short)
+print("  Saved tables/severe_shocks_GDP.tex and tables/severe_shocks_GDP_slides.tex")
 
 # ============================================================================
 # 2. Severe Foreign Price Shocks Table
@@ -127,6 +143,23 @@ combined_latex = '\n'.join(lines)
 with open(os.path.join(out_dir, "tables/foreign_price_shock_sectors_2_20_combined.tex"), "w") as f:
     f.write(combined_latex)
 print("  Saved tables/foreign_price_shock_sectors_2_20_combined.tex")
+
+# truncate at 30 for slides and rename columns Uniform and Difference for better readability on slides
+combined_df['Sector'] = combined_df['Sector'].apply(lambda x: truncate_industry(x, max_len=30))
+combined_df.rename(columns={'Uniform': 'Unif.', 'Difference': 'Diff.'}, inplace=True)
+combined_tex_short = combined_df.to_latex(index=False, escape=False)
+lines_short = combined_tex_short.splitlines()
+lines_short.insert(4, r'\midrule')
+lines_short.insert(5, r'\multicolumn{4}{l}{\textbf{Shock to ' + sector_2_name + r' import prices}} \\')
+lines_short.insert(6, r'\midrule')
+lines_short.insert(10, r'\midrule')
+lines_short.insert(11, r'\multicolumn{4}{l}{\textbf{Shock to ' + sector_20_name + r' import prices}} \\')
+lines_short.insert(12, r'\midrule')
+combined_latex_short = '\n'.join(lines_short)
+with open(os.path.join(out_dir, "tables/foreign_price_shock_sectors_2_20_combined_slides.tex"), "w") as f:
+    f.write(combined_latex_short)
+print("  Saved tables/foreign_price_shock_sectors_2_20_combined_slides.tex")
+
 
 # ============================================================================
 # 3. Aggregate Responses (Calibrated Shocks) - Figures & Table
@@ -259,5 +292,11 @@ top_3_price_table['Uniform'] = ((top_3_data['mean_common_theta'] - 1) * 100).app
 top_3_price_table['Difference'] = (top_3_data['main_minus_common'] * 100).apply(lambda x: f'{x:.2f}\\%').values
 top_3_price_table.to_latex(os.path.join(out_dir, 'tables/calibrated_shocks_top3.tex'), index=False, escape=False)
 print("  Saved tables/calibrated_shocks_price.tex")
+
+# truncate Industry at 30 for slides, and rename columns Unif. and Diff. to Uniform and Difference for better readability on slides
+top_3_price_table['Industry'] = top_3_price_table['Industry'].apply(lambda x: x[:30] + '...' if len(x) > 30 else x)
+top_3_price_table.rename(columns={'Uniform': 'Unif.', 'Difference': 'Diff.'}, inplace=True)
+top_3_price_table.to_latex(os.path.join(out_dir, 'tables/calibrated_shocks_top3_slides.tex'), index=False, escape=False)
+print("  Saved tables/calibrated_shocks_price_slides.tex")
 
 print("\nAll tables and figures exported.")
