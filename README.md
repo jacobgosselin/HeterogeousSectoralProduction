@@ -8,6 +8,8 @@ All generated outputs (raw data, cleaned data, figures, tables) are written to t
 
 To run this locally, set the output_directory to a local folder that contains `raw_data/`, `clean_data/`, `figures/`, `figures/omega_heatmap/`, and `tables/` subdirectories. 
 
+**NOTE**: Notation in code doesn't correspond perfectly to the paper. In particular, `a_ijdt` = $\Omega_{ijt}$, and `s_ijdt` = $\Phi_{ijt}$, and `p_jdt` = $P_{jt}$. 
+
 
 ## Main Output
 

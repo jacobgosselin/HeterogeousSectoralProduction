@@ -233,8 +233,8 @@ analysis_data <- industry_industry_exp %>%
     j = industry_supply,
     t = Year,
     alpha_it = labor_comp/(labor_comp + sum(exp_ijt)),
-    a_ijt = exp_ijt / sum(exp_ijt),
-    a_ijdt = exp_ijdt / sum(exp_ijt),
+    a_ijt = exp_ijt / sum(exp_ijt), 
+    a_ijdt = exp_ijdt / sum(exp_ijt), # NOTE: this corresponds to Omega_ijt in the paper (A_ijt is revenue share in paper; sorry for confusing notation)
     p_jdt = price,
     q_idt = ii_price,
     log_a_ijdt = log(a_ijdt),
