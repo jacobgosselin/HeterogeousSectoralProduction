@@ -43,7 +43,7 @@ class ModelParameters:
         P_f: (N,) exogenous foreign prices
 
     Net exports (calibrated):
-        NX: (N,) sector-specific net exports at baseline
+        NX: (N,) sector-specific net exports at baseline (scale parameter for export demand curve)
     """
     N: int
     sigma: float
@@ -78,17 +78,15 @@ class SOEModel:
     """
     Solver for the small open economy model following the pseudo-code in Model.md.
 
-    Equilibrium: N prices P_d, N outputs Y_d, and sector-specific net exports NX_i that satisfy:
+    Equilibrium: N prices P_d, N outputs Y_d, and exchange rate E that satisfy:
     1. Price equations: P_d[i] = MC[i] for all i
-    2. Quantity equations: Y_d[i] = C_d[i] + sum_k X_kd[i] + NX_i for all i
-    3. Price index equation: P_C = 1 (normalization)
+    2. Quantity equations: Y_d[i] = C_d[i] + sum_k X_kd[i] + NX_i * (P_d[i]/E)^(-gamma[i]) for all i
+    3. Price index equation: P_C = 1 (normalization, pins E)
 
-    The model automatically solves the non-stochastic equilibrium (Z=1, P_f=1)
-    upon initialization to calibrate NX_i such that P_d[i] = 1 and W_i = 1 for all i,
-    then NX_i is held fixed across all subsequent equilibria with shocks.
-
-    Interpretation: NX_i represents the net export position of good i, calibrated to
-    ensure the baseline equilibrium corresponds between closed and open economy.
+    At initialization the model solves the baseline (Z=1, P_f=1, E=1, P_d=1) and backs out
+    NX_i as the residual from market clearing. Post-shock, NX_i is the baseline scale parameter
+    of an export demand curve: export quantity responds to the real exchange rate P_d[i]/E via
+    the Armington elasticity gamma[i], and E adjusts endogenously so that P_C = 1.
     """
 
     def __init__(self, params: ModelParameters, verbose: bool = False):

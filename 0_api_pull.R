@@ -3,7 +3,7 @@ library(jsonlite)
 out_dir <- trimws(readLines("output_directory.txt", n = 1))
 
 # pulling data from api
-creds <- fromJSON(file.path(out_dir, "../misc/api_keys.txt"))
+creds <- fromJSON('/Users/jacobgosselin/Library/CloudStorage/GoogleDrive-jacob.gosselin@u.northwestern.edu/My Drive/research_ideas/misc/api_keys.txt')
 beaKey = creds$BEA # have to put in your own
 # parse json data from url
 getDatIO <- function(tableID) {
@@ -29,10 +29,10 @@ getDatNIPA <- function(tableName) {
 }
 
 # list of table IDs to confirm I'm getting correct data
-IO_Table_List = GET("https://apps.bea.gov/api/data?&UserID=2796DD07-FDBD-4424-83E9-5D8AD49673D6&method=GetParameterValues&datasetname=InputOutput&ParameterName=TableID&ResultFormat=json")
+IO_Table_List = GET(paste0("https://apps.bea.gov/api/data?&UserID=", beaKey, "&method=GetParameterValues&datasetname=InputOutput&ParameterName=TableID&ResultFormat=json"))
 IO_Table_List <- content(IO_Table_List, "text")
 IO_Table_List <- fromJSON(IO_Table_List)$BEAAPI$Results$ParamValue
-GDP_Table_List = GET("https://apps.bea.gov/api/data?&UserID=2796DD07-FDBD-4424-83E9-5D8AD49673D6&method=GetParameterValues&datasetname=GDPbyIndustry&ParameterName=TableID&ResultFormat=json")
+GDP_Table_List = GET(paste0("https://apps.bea.gov/api/data?&UserID=", beaKey, "&method=GetParameterValues&datasetname=GDPbyIndustry&ParameterName=TableID&ResultFormat=json"))
 GDP_Table_List <- content(GDP_Table_List, "text")
 GDP_Table_List <- fromJSON(GDP_Table_List)$BEAAPI$Results$ParamValue
 

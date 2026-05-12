@@ -13,8 +13,8 @@ Saves results to clean_data/.
 # Toggle which shock types to run
 # ============================================================================
 RUN_SEVERE_DOMESTIC = True
-RUN_SEVERE_FOREIGN = True
-RUN_CALIBRATED = True
+RUN_SEVERE_FOREIGN = False
+RUN_CALIBRATED = False
 
 import os
 import sys
