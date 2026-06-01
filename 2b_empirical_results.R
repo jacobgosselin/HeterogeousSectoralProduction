@@ -94,12 +94,13 @@ plot_main_highlight <- ggplot(plot_main_data %>% filter(model == "Main"), aes(x 
   geom_errorbar(aes(ymin = theta_i - 1.65*se_robust, ymax = theta_i + 1.65*se_robust), width = 1) +
   theme_minimal() +
   labs(title = "", x = "Industry", y = "Elasticity") +
+  scale_color_manual(values = c("FALSE" = two_colors[1], "TRUE" = two_colors[2]),
+                     breaks = c("FALSE", "TRUE"),
+                     labels = c("FALSE" = "Other Industries", "TRUE" = "Oil and Gas Subgroup"),
+                     name = "") +
   theme(text = element_text(family = "serif", size = 32),
         legend.position = "bottom",
         axis.text.x = element_blank()) +
-  scale_color_manual(values = c("FALSE" = two_colors[1], "TRUE" = two_colors[2]), 
-                     breaks = c("FALSE", "TRUE"),
-                     labels = c("FALSE" = "Other Industries", "TRUE" = "Oil and Gas Subgroup")) +
   coord_cartesian(ylim = c(-.5, 3.5))
 
 plot_theta_biased_data <- est_theta %>% 

@@ -7,6 +7,7 @@ library(texreg)
 library(readxl)
 library(RColorBrewer)
 library(viridis)
+library(magick)
 out_dir <- trimws(readLines("output_directory.txt", n = 1))
 
 # set baseline year
@@ -31,38 +32,48 @@ code_desc_crosswalk <- code_desc_crosswalk %>%
 # DESCRIPTIVE PLOTS
 # ============================================================================
 
+# Compute common log(a_ijt) limits across all years for a shared legend
+all_years <- 1997:2024
+global_log_limits <- {
+  all_vals <- analysis_data %>%
+    filter(t %in% all_years, i %in% non_govt_industries, j %in% non_govt_industries) %>%
+    pull(a_ijt)
+  all_vals <- all_vals[all_vals > 0]
+  range(log(all_vals), na.rm = TRUE)
+}
+
 # Function to create Omega heatmap for a given year
-create_omega_heatmap <- function(year_val, save_path = file.path(out_dir, "figures/omega_heatmap/")) {
+create_omega_heatmap <- function(year_val, fill_limits, save_path = file.path(out_dir, "figures/omega_heatmap/")) {
 
   # Prepare data for heatmap
   omega_heatmap_data <- analysis_data %>%
     filter(t == year_val) %>%
     select(i, j, a_ijt) %>%
     filter(i %in% non_govt_industries & j %in% non_govt_industries)
-  
+
   # ensure all i j combinations present; fill missing with 0
   all_combinations <- expand_grid(
     i = non_govt_industries,
     j = non_govt_industries
   )
-  
+
   # Join with your data
   omega_heatmap_data <- all_combinations %>%
     left_join(omega_heatmap_data, by = c("i", "j")) %>%
     mutate(a_ijt = replace_na(a_ijt, 0))
-  
+
   # Create heatmap
   omega_plot <- ggplot(omega_heatmap_data, aes(x = j, y = i, fill = log(a_ijt))) +
     geom_tile() +
-    scale_fill_viridis_c(option = "plasma", name = "Expenditure\nShare") +
+    scale_fill_viridis_c(option = "plasma", name = "Expenditure\nShare", limits = fill_limits, oob = scales::squish) +
     theme_minimal() +
     labs(title = paste0(year_val),
          x = "Supplier Industry (j)",
          y = "Purchasing Industry (i)") +
-    theme(text = element_text(family = "serif", size = 24),
-          axis.text.x = element_text(angle = 90, hjust = 1, size = 6),
-          axis.text.y = element_text(size = 6),
-          legend.position = "none") 
+    theme(text = element_text(family = "serif", size = 32),
+          axis.text.x = element_text(angle = 90, hjust = 1, size = 8),
+          axis.text.y = element_text(size = 8),
+          legend.position = "none")
 
   # Save heatmap
   filename <- paste0(save_path, "omega_heatmap_", year_val, ".pdf")
@@ -71,11 +82,18 @@ create_omega_heatmap <- function(year_val, save_path = file.path(out_dir, "figur
   return(omega_plot)
 }
 
-# Generate heatmaps for all years (2000-2024)
-all_years <- 1997:2024
+# Generate heatmaps for all years using common legend scale
 for (yr in all_years) {
-  create_omega_heatmap(yr)
+  create_omega_heatmap(yr, fill_limits = global_log_limits)
 }
+
+# Combine annual heatmaps into an animated GIF (1 frame per second)
+heatmap_dir <- file.path(out_dir, "figures/omega_heatmap/")
+frames <- do.call(c, lapply(all_years, function(yr) {
+  image_read_pdf(paste0(heatmap_dir, "omega_heatmap_", yr, ".pdf"), density = 150)
+}))
+gif <- image_animate(frames, fps = 1, loop = 0)
+image_write(gif, path = file.path(out_dir, "figures/omega_heatmap/omega_heatmap.gif"))
 
 
 # --- 3-PANEL VARIANCE PLOT: Expenditure Shares, Prices, Import Ratios ---
@@ -182,6 +200,9 @@ variance_3panel <- (panel_a | panel_b | panel_c) +
 
 # Save 3-panel figure
 ggsave(file.path(out_dir, "figures/variance_3panel.pdf"), plot = variance_3panel, width = 16, height = 8)
+
+# save panel_a as its own figure for use in presentation
+ggsave(file.path(out_dir, "figures/variance_panel_a.pdf"), plot = panel_a, width = 10, height = 10)
 
 # ============================================================================
 # ATALAY IV REG COMPARISON

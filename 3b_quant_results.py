@@ -125,7 +125,14 @@ for shocked_sector_idx in [2, 20]:
     top_3['Main'] = top_3['Main'].apply(lambda x: f'{x:.3f}\\%')
     top_3['Uniform'] = top_3['Uniform'].apply(lambda x: f'{x:.3f}\\%')
     top_3['Difference'] = top_3['Difference'].apply(lambda x: f'{x:.3f}\\%')
-    combined_tables.append(top_3)
+
+    avg_row = pd.DataFrame([{
+        'Sector': 'Average',
+        'Main': f'{diff_df["Main"].mean():.3f}\\%',
+        'Uniform': f'{diff_df["Uniform"].mean():.3f}\\%',
+        'Difference': f'{diff_df["Difference"].mean():.3f}\\%',
+    }])
+    combined_tables.append(pd.concat([top_3, avg_row], ignore_index=True))
 
 combined_df = pd.concat(combined_tables, ignore_index=True)
 combined_tex = combined_df.to_latex(index=False, escape=False)
@@ -136,9 +143,9 @@ lines = combined_tex.splitlines()
 lines.insert(4, r'\midrule')
 lines.insert(5, r'\multicolumn{4}{l}{\textbf{Shock to ' + sector_2_name + r' import prices}} \\')
 lines.insert(6, r'\midrule')
-lines.insert(10, r'\midrule')
-lines.insert(11, r'\multicolumn{4}{l}{\textbf{Shock to ' + sector_20_name + r' import prices}} \\')
-lines.insert(12, r'\midrule')
+lines.insert(11, r'\midrule')
+lines.insert(12, r'\multicolumn{4}{l}{\textbf{Shock to ' + sector_20_name + r' import prices}} \\')
+lines.insert(13, r'\midrule')
 combined_latex = '\n'.join(lines)
 with open(os.path.join(out_dir, "tables/foreign_price_shock_sectors_2_20_combined.tex"), "w") as f:
     f.write(combined_latex)
@@ -152,9 +159,9 @@ lines_short = combined_tex_short.splitlines()
 lines_short.insert(4, r'\midrule')
 lines_short.insert(5, r'\multicolumn{4}{l}{\textbf{Shock to ' + sector_2_name + r' import prices}} \\')
 lines_short.insert(6, r'\midrule')
-lines_short.insert(10, r'\midrule')
-lines_short.insert(11, r'\multicolumn{4}{l}{\textbf{Shock to ' + sector_20_name + r' import prices}} \\')
-lines_short.insert(12, r'\midrule')
+lines_short.insert(11, r'\midrule')
+lines_short.insert(12, r'\multicolumn{4}{l}{\textbf{Shock to ' + sector_20_name + r' import prices}} \\')
+lines_short.insert(13, r'\midrule')
 combined_latex_short = '\n'.join(lines_short)
 with open(os.path.join(out_dir, "tables/foreign_price_shock_sectors_2_20_combined_slides.tex"), "w") as f:
     f.write(combined_latex_short)
