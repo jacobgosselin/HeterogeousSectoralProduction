@@ -217,7 +217,8 @@ elasticities <- code_desc_crosswalk %>%
   left_join(
     est_theta %>%
       filter(model == "Main") %>%
-      select(i, theta_i),
+      rename(theta_se = se_robust) %>%
+      select(i, theta_i, theta_se),
     by = "i"
   ) %>%
   left_join(
@@ -232,9 +233,11 @@ elasticities <- code_desc_crosswalk %>%
     gamma_j = ifelse(gamma_j == 0, 1e-6, gamma_j),
     gamma_j = ifelse(is.na(gamma_j), 1e-6, gamma_j),
     theta_uniform = est_theta %>% filter(model == "Uniform") %>% distinct() %>% pull(theta_i),
-    gamma_uniform = est_gamma %>% filter(model == "Main") %>% distinct() %>% pull(gamma_j)
+    theta_uniform_se = est_theta %>% filter(model == "Uniform") %>% distinct() %>% pull(se_robust),
+    gamma_uniform = est_gamma %>% filter(model == "Main") %>% distinct() %>% pull(gamma_j), 
+    gamma_uniform_se = est_gamma %>% filter(model == "Main") %>% distinct() %>% pull(se_robust)
   ) %>%
-  select(i, Industry, theta_i, gamma_j, theta_uniform, gamma_uniform)
+  select(i, Industry, theta_i, theta_se, gamma_j, theta_uniform, theta_uniform_se, gamma_uniform, gamma_uniform_se)
 
 # CLEAN CALIBRATION MATRICES
 Omega <- analysis_data %>%
@@ -279,7 +282,9 @@ sigma_reg_data <- analysis_data %>%
   )
 
 sigma_reg <- feols(delta_log_beta_it ~ delta_log_p_jdt| t, data = sigma_reg_data)
+sigma_reg_summary <- summary(sigma_reg, se = "hetero")
 sigma <- 1 - coef(sigma_reg)["delta_log_p_jdt"]
+sigma_se <- sigma_reg_summary$se["delta_log_p_jdt"]
   
 beta <- analysis_data %>%
   filter(t == year) %>%
@@ -301,12 +306,13 @@ calibration_vectors <- elasticities %>%
   left_join(alpha, by = "i") %>%
   left_join(beta, by = "i") %>%
   mutate(
-    sigma = sigma
+    sigma = sigma,
+    sigma_se = sigma_se
   )
   
 
 save(calibration_vectors, Omega_mat, Delta_mat, industry_TFP, file = file.path(out_dir, "clean_data/calibration_data.RData"))
 # Write csv of elasticities to main folder
 substitution_elasticities <- calibration_vectors %>%
-  select(Industry_Code = i, Industry_Desc = Industry, theta_i, theta_uniform, armington = gamma_uniform, household = sigma)
+  select(Industry_Code = i, Industry_Desc = Industry, input_elasticity = theta_i, input_elasticity_se = theta_se, uniform_input_elasticity =theta_uniform, uniform_input_elasticity_se = theta_uniform_se, armington = gamma_uniform, armington_se = gamma_uniform_se, household_elasticity = sigma, household_elasticity_se = sigma_se)
 write.csv(substitution_elasticities, "elasticity_estimates.csv", row.names = FALSE)
