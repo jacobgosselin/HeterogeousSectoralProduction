@@ -315,4 +315,29 @@ save(calibration_vectors, Omega_mat, Delta_mat, industry_TFP, file = file.path(o
 # Write csv of elasticities to main folder
 substitution_elasticities <- calibration_vectors %>%
   select(Industry_Code = i, Industry_Desc = Industry, input_elasticity = theta_i, input_elasticity_se = theta_se, uniform_input_elasticity =theta_uniform, uniform_input_elasticity_se = theta_uniform_se, armington = gamma_uniform, armington_se = gamma_uniform_se, household_elasticity = sigma, household_elasticity_se = sigma_se)
-write.csv(substitution_elasticities, "elasticity_estimates.csv", row.names = FALSE)
+# instead do substitution elasticities long, where uniform, armington, and household are additional rows 
+substitution_elasticities_long <- substitution_elasticities %>%
+  rename(elasticity = input_elasticity, std_err = input_elasticity_se) %>%
+  select(Industry_Code, Industry_Desc, elasticity, std_err) %>%
+  bind_rows(
+    tibble(
+      Industry_Code = "Uniform",
+      Industry_Desc = "Uniform Input Substitution Elasticity",
+      elasticity = substitution_elasticities$uniform_input_elasticity[1],
+      std_err = substitution_elasticities$uniform_input_elasticity_se[1]
+    ),
+    tibble(
+      Industry_Code = "Armington",
+      Industry_Desc = "Armington Substitution Elasticity",
+      elasticity = substitution_elasticities$armington[1],
+      std_err = substitution_elasticities$armington_se[1]
+    ),
+    tibble(
+      Industry_Code = "Household",
+      Industry_Desc = "Household Substitution Elasticity",
+      elasticity = substitution_elasticities$household_elasticity[1],
+      std_err = substitution_elasticities$household_elasticity_se[1]
+    )
+  )
+
+write.csv(substitution_elasticities_long, "elasticity_estimates.csv", row.names = FALSE)
