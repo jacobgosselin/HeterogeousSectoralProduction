@@ -137,11 +137,10 @@ def estimate_elasticities_gmm(
         n_gamma = n_tradeable
     n_params = n_theta + n_gamma
 
-    # Moment conditions: E[epsilon * instrument] = 0
     # Price moments: E[epsilon * p * I[i=I]] = 0
     #   - theta_type="i-specific": one moment per industry I (n_i moments)
     #   - theta_type="common": one aggregate moment (1 moment)
-    # Share moments: E[epsilon * s * I[i=I]] = 0
+    # Import share moments: E[epsilon * s * I[i=I]] = 0
     #   - gamma_type="none": no share moments (0 moments)
     #   - theta_type="i-specific" (gamma_type != "none"): one moment per industry I (n_i moments)
     #   - theta_type="common" (gamma_type != "none"): one aggregate moment (1 moment)
@@ -149,7 +148,7 @@ def estimate_elasticities_gmm(
     # Price moments
     n_moments_p = 1 if theta_type == "common" else n_i
 
-    # Share moments
+    # Import share moments
     if gamma_type == "none":
         n_moments_s = 0
     else:
@@ -163,7 +162,7 @@ def estimate_elasticities_gmm(
     # Provide GMM setup information
     print("\n--- GMM SETUP ---")
     print(f"Number of parameters to estimate: {n_params} (theta: {n_theta}, gamma: {n_gamma})")
-    print(f"Number of moment conditions: {n_moments} (price moments: {n_moments_p}; share moments: {n_moments_s})")
+    print(f"Number of moment conditions: {n_moments} (price moments: {n_moments_p}; import share moments: {n_moments_s})")
     print(f"Number of observations: {n_obs}")
 
     @njit
@@ -381,16 +380,13 @@ def estimate_elasticities_gmm(
         G[:, k] = (calc_moment_conditions(params_plus) - calc_moment_conditions(params_minus)) / (2 * eps)
 
     # Compute variance-covariance matrix using heteroskedastic-robust sandwich formula
-    S = 1/n_obs * (moment_contributions.T @ moment_contributions) 
-
-    # Identity weighting (W = I)
-    # Robust variance: Var(beta) = (G' G)^{-1} G' S G (G' G)^{-1}
+    # Under identity weighting (W = I), Var(beta) = (G' G)^{-1} G' S G (G' G)^{-1}
+    S = 1/n_obs * (moment_contributions.T @ moment_contributions) # Variance of moment conditions
     GtG = G.T @ G
     GtG_inv = np.linalg.inv(GtG)
     middle = G.T @ S @ G
-    vcov = 1/n_obs * GtG_inv @ middle @ GtG_inv 
-
-    se = np.sqrt(np.diag(vcov))
+    vcov = GtG_inv @ middle @ GtG_inv 
+    se = np.sqrt(1/n_obs * np.diag(vcov)) # ses = sqrt(diag(1/n * V))
 
     # =========================================================================
     # Parse results

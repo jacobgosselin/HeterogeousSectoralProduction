@@ -1,3 +1,13 @@
+"""
+Helper functions for solving the system of equations in the SOE model. These functions compute:
+- Armington price indices
+- Intermediate price indices
+- Marginal costs
+- Intermediate demands
+- Consumption demands
+- Residuals for the system of equations
+"""
+
 import numpy as np
 from numba import njit
 import pandas as pd

@@ -1,10 +1,8 @@
 """
-Small Open Economy GE Model Solver
+Small Open Economy GE Model Solver (Exogenous Foreign Prices)
 
 Static GE model with N sectors, nested CES production and consumption,
 Armington aggregation for domestic/foreign goods, and fixed labor by sector.
-
-This implementation follows the pseudo-code structure in Model.md.
 """
 
 import numpy as np
@@ -37,12 +35,14 @@ class ModelParameters:
 
     Endowments:
         L: (N,) labor endowment by sector (fixed)
+
+    Productivity:
         Z: (N,) productivity by sector
 
     Foreign prices:
         P_f: (N,) exogenous foreign prices
 
-    Net exports (calibrated):
+    Exports (calibrated):
         NX: (N,) sector-specific net exports at baseline (scale parameter for export demand curve)
     """
     N: int
@@ -76,8 +76,6 @@ class ModelParameters:
 
 class SOEModel:
     """
-    Solver for the small open economy model following the pseudo-code in Model.md.
-
     Equilibrium: N prices P_d, N outputs Y_d, and exchange rate E that satisfy:
     1. Price equations: P_d[i] = MC[i] for all i
     2. Quantity equations: Y_d[i] = C_d[i] + sum_k X_kd[i] + NX_i * (P_d[i]/E)^(-gamma[i]) for all i
@@ -138,8 +136,6 @@ class SOEModel:
 
     def compute_residuals(self, x: np.ndarray) -> np.ndarray:
         """
-        Step 6 of pseudo-code: Compute residuals of 2N equations.
-
         During calibration (baseline with Z=1, P_f=1):
         - We target P_d[i] = 1 and W_i = 1 for all i
         - N price equations: P_d[i] - 1 = 0
@@ -170,7 +166,6 @@ class SOEModel:
     def _create_constraint_function(self):
         """
         Create a JIT-compiled constraint function for use with scipy.optimize.minimize.
-        This follows the pattern from eqm_solver_functions.py.
         """
         # Capture all parameters in local variables for the JIT function
         N = self.p.N
@@ -199,10 +194,8 @@ class SOEModel:
 
     def _analytical_initial_guess(self) -> tuple[np.ndarray, np.ndarray, float]:
         """
-        Compute analytical initial guess based on linearized solution.
-
-        This follows the approach from eqm_solver_functions.py:
-        - For a closed economy, the equilibrium prices satisfy approximately:
+        Compute analytical initial guess based on linearized solution. 
+        For a closed economy, the equilibrium prices satisfy approximately:
           log(P) ≈ -(I - diag(1-alpha) @ Omega)^(-1) @ log(Z)
         - Outputs are then approximated from the input-output structure
 
@@ -324,7 +317,7 @@ class SOEModel:
             NX_computed = self.NX.copy()
 
         # Compute P_C (aggregate consumption price index)
-        P_armington, P_C = compute_consumption_price(P_d, E, self.p.P_f, self.p.delta_0,
+        P_C = compute_consumption_price(P_d, E, self.p.P_f, self.p.delta_0,
                                                      self.p.gamma, self.p.beta, self.p.sigma)
         if verbose:
             print(f"Solver success: {result.success}")
@@ -394,13 +387,12 @@ def create_example_parameters(N: int = 3, seed: int = 42) -> ModelParameters:
 
 
 if __name__ == "__main__":
-    # Test with 10 sectors
-    print("Creating 10-sector model...")
+    # Testing code to verify convergence
     params = create_example_parameters(N=66)
     # set first row of delta = 1, rest = .7
     # params.delta = .7 * params.delta
-
-    # Initialize model (automatically solves baseline and calibrates T)
+    
+    # Initialize to solve baseline and calibrate NX_i
     model = SOEModel(params, verbose=True)
 
     # Solve a counterfactual with productivity shock
