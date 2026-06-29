@@ -143,6 +143,8 @@ industry_TFP <- tfp_KLEMS_long %>% arrange(i, year) %>%
                                          delta_tfp_4 = log(TFP) - log(lag(TFP, 4))) 
 industry_TFP$year <- as.numeric(as.character(industry_TFP$year))
 industry_TFP <- subset(industry_TFP, year > 1997)
+# rename i as Code
+industry_TFP <- industry_TFP %>% rename(Code = i)
 
 # save cleaned TFP data
 save(industry_TFP, file = file.path(out_dir, "clean_data/industry_TFP.RData"))

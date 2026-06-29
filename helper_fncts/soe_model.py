@@ -317,7 +317,7 @@ class SOEModel:
             NX_computed = self.NX.copy()
 
         # Compute P_C (aggregate consumption price index)
-        P_C = compute_consumption_price(P_d, E, self.p.P_f, self.p.delta_0,
+        P_armington, P_C = compute_consumption_price(P_d, E, self.p.P_f, self.p.delta_0,
                                                      self.p.gamma, self.p.beta, self.p.sigma)
         if verbose:
             print(f"Solver success: {result.success}")

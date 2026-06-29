@@ -7,6 +7,7 @@ for the 'main' and 'common_theta' calibrations (open economy).
 
 import os
 import sys
+import csv
 
 import pandas as pd
 import numpy as np
@@ -45,6 +46,17 @@ L_vec = alpha_vec * (xi_inv @ beta_vec)
 all_industry_names = calibration_data['Industry'].tolist()
 
 # ============================================================================
+# paper_stats.csv accumulator
+# Each row: title, diff (level difference, main - uniform), magnitude (diff as % of Main)
+# ============================================================================
+paper_stats_rows = []
+
+def add_paper_stat(title, diff, main):
+    """Append a row: diff in col 2, diff as a percent of Main (magnitude of change) in col 3."""
+    magnitude = np.abs(diff / main) * 100 if main != 0 else float('nan') # do absolute value of magnitude
+    paper_stats_rows.append({'title': title, 'diff': diff, 'magnitude': magnitude})
+
+# ============================================================================
 # 1. Severe Domestic Productivity Shocks Table
 # ============================================================================
 print("Generating severe domestic productivity shocks table...")
@@ -57,18 +69,26 @@ def truncate_industry(name, max_len=50):
 def create_table(df):
     table = pd.DataFrame()
     table['Industry'] = df['Industry'].apply(lambda x: truncate_industry(x, max_len=50))
-    table['Main'] = ((df['main'] - 1) * 100).apply(lambda x: f'{x:.2f}\\%')
+    table['Main_num'] = (df['main'] - 1) * 100
+    table['Main'] = table['Main_num'].apply(lambda x: f'{x:.2f}\\%')
     table['Uniform'] = ((df['common_theta'] - 1) * 100).apply(lambda x: f'{x:.2f}\\%')
     table['Change'] = (df['main'] - df['common_theta']) * 100
     return table
 
 full_table = create_table(severe_shocks)
 full_table_sorted = full_table.sort_values(by='Change', ascending=False)
-full_table_sorted['Change'] = full_table_sorted['Change'].apply(lambda x: f'{x:.2f}\\%')
 top_3_table = full_table_sorted.head(3)
 bottom_3_table = full_table_sorted.tail(3)
 
 combined_table = pd.concat([top_3_table, bottom_3_table], ignore_index=True)
+
+# paper_stats: one row per table row, diff = Change, magnitude = Change/Main
+for i, r in combined_table.iterrows():
+    add_paper_stat(f'severe-shocks-GDP-row-{i + 1}', r['Change'], r['Main_num'])
+
+# drop helper columns before formatting/export
+combined_table = combined_table.drop(columns=['Main_num'])
+combined_table['Change'] = combined_table['Change'].apply(lambda x: f'{x:.2f}\\%')
 combined_table_tex = combined_table.to_latex(index=False, escape=False)
 lines = combined_table_tex.splitlines()
 lines.insert(4, r'\midrule')
@@ -110,6 +130,7 @@ def truncate_industry(name, max_len=30):
     return name[:max_len] + '...' if len(name) > max_len else name
 
 combined_tables = []
+paper_stats_foreign = []
 for shocked_sector_idx in [2, 20]:
     main_prices = prices_main.loc[shocked_sector_idx].values
     common_prices = prices_common.loc[shocked_sector_idx].values
@@ -122,6 +143,13 @@ for shocked_sector_idx in [2, 20]:
     })
 
     top_3 = diff_df.sort_values('Main', ascending=False).head(3).copy()
+
+    # paper_stats: numeric values for top 3 rows + average, before string formatting
+    section_rows = [(r['Difference'], r['Main']) for _, r in top_3.iterrows()]
+    section_rows.append((diff_df['Difference'].mean(), diff_df['Main'].mean()))
+    for diff_val, main_val in section_rows:
+        paper_stats_foreign.append((diff_val, main_val))
+
     top_3['Main'] = top_3['Main'].apply(lambda x: f'{x:.3f}\\%')
     top_3['Uniform'] = top_3['Uniform'].apply(lambda x: f'{x:.3f}\\%')
     top_3['Difference'] = top_3['Difference'].apply(lambda x: f'{x:.3f}\\%')
@@ -135,6 +163,11 @@ for shocked_sector_idx in [2, 20]:
     combined_tables.append(pd.concat([top_3, avg_row], ignore_index=True))
 
 combined_df = pd.concat(combined_tables, ignore_index=True)
+
+# paper_stats: one row per table row (sector 2 top3+avg, then sector 20 top3+avg)
+for i, (diff_val, main_val) in enumerate(paper_stats_foreign):
+    add_paper_stat(f'foreign-price-shock-row-{i + 1}', diff_val, main_val)
+
 combined_tex = combined_df.to_latex(index=False, escape=False)
 
 sector_2_name = all_industry_names[2]
@@ -227,8 +260,10 @@ def compute_stats(series):
     return series.mean(), series.std(), series.skew()
 
 rows = []
+stats_by_label = {}
 for config_name, label in [('main', 'Main'), ('common_theta', 'Uniform')]:
     mean, std_dev, skewness = compute_stats((calibration_shocks_results[config_name] - 1) * 100)
+    stats_by_label[label] = {'mean': mean, 'std': std_dev, 'skew': skewness}
     rows.append({
         'Calibration': label,
         'Mean': f'{mean:.2f}\%',
@@ -236,6 +271,12 @@ for config_name, label in [('main', 'Main'), ('common_theta', 'Uniform')]:
         'Skewness': f'{skewness:.2f}\%'
     })
 stats_table = pd.DataFrame(rows)
+
+# paper_stats: difference (Main - Uniform) in mean/std/skew, as level diff and magnitude (% of Main)
+for stat_key, stat_name in [('mean', 'mean'), ('std', 'stddev'), ('skew', 'skew')]:
+    main_val = stats_by_label['Main'][stat_key]
+    uniform_val = stats_by_label['Uniform'][stat_key]
+    add_paper_stat(f'calibrated-shocks-GDP-{stat_name}', main_val - uniform_val, main_val)
 stats_table.to_latex(os.path.join(out_dir, 'tables/calibrated_shocks_GDP.tex'), index=False, escape=False)
 print("  Saved tables/calibrated_shocks_GDP.tex")
 
@@ -279,7 +320,7 @@ for cn, config in configs_for_normalization.items():
     print(f"  Normalized {cn}")
 
 # ============================================================================
-# 5. Sectoral Price Table (Top 3)
+# 5. Sectoral Price Table (Top 5)
 # ============================================================================
 print("Generating sectoral price table...")
 
@@ -291,19 +332,36 @@ for sector_idx in range(N):
 price_comparison_stats.insert(0, 'Industry', calibration_data['Industry'].values)
 price_comparison_stats['main_minus_common'] = price_comparison_stats['mean_main'] - price_comparison_stats['mean_common_theta']
 
-top_3_data = price_comparison_stats.sort_values(by='main_minus_common', ascending=False).head(3)
-top_3_price_table = pd.DataFrame()
-top_3_price_table['Industry'] = top_3_data['Industry'].apply(lambda x: x[:75] + '...' if len(x) > 75 else x).values
-top_3_price_table['Main'] = ((top_3_data['mean_main'] - 1) * 100).apply(lambda x: f'{x:.2f}\\%').values
-top_3_price_table['Uniform'] = ((top_3_data['mean_common_theta'] - 1) * 100).apply(lambda x: f'{x:.2f}\\%').values
-top_3_price_table['Difference'] = (top_3_data['main_minus_common'] * 100).apply(lambda x: f'{x:.2f}\\%').values
-top_3_price_table.to_latex(os.path.join(out_dir, 'tables/calibrated_shocks_top3.tex'), index=False, escape=False)
+top_5_data = price_comparison_stats.sort_values(by='main_minus_common', ascending=False).head(5)
+top_5_price_table = pd.DataFrame()
+top_5_price_table['Industry'] = top_5_data['Industry'].apply(lambda x: x[:75] + '...' if len(x) > 75 else x).values
+top_5_price_table['Main'] = ((top_5_data['mean_main'] - 1) * 100).apply(lambda x: f'{x:.2f}\\%').values
+top_5_price_table['Uniform'] = ((top_5_data['mean_common_theta'] - 1) * 100).apply(lambda x: f'{x:.2f}\\%').values
+top_5_price_table['Difference'] = (top_5_data['main_minus_common'] * 100).apply(lambda x: f'{x:.2f}\\%').values
+
+# paper_stats: one row per table row, diff = main_minus_common*100, Main = (mean_main-1)*100
+top_5_main_num = ((top_5_data['mean_main'] - 1) * 100).values
+top_5_diff_num = (top_5_data['main_minus_common'] * 100).values
+for i in range(len(top_5_data)):
+    add_paper_stat(f'calibrated-shocks-top5-row-{i + 1}', top_5_diff_num[i], top_5_main_num[i])
+
+top_5_price_table.to_latex(os.path.join(out_dir, 'tables/calibrated_shocks_top5.tex'), index=False, escape=False)
 print("  Saved tables/calibrated_shocks_price.tex")
 
 # truncate Industry at 30 for slides, and rename columns Unif. and Diff. to Uniform and Difference for better readability on slides
-top_3_price_table['Industry'] = top_3_price_table['Industry'].apply(lambda x: x[:30] + '...' if len(x) > 30 else x)
-top_3_price_table.rename(columns={'Uniform': 'Unif.', 'Difference': 'Diff.'}, inplace=True)
-top_3_price_table.to_latex(os.path.join(out_dir, 'tables/calibrated_shocks_top3_slides.tex'), index=False, escape=False)
+top_5_price_table['Industry'] = top_5_price_table['Industry'].apply(lambda x: x[:30] + '...' if len(x) > 30 else x)
+top_5_price_table.rename(columns={'Uniform': 'Unif.', 'Difference': 'Diff.'}, inplace=True)
+top_5_price_table.to_latex(os.path.join(out_dir, 'tables/calibrated_shocks_top5_slides.tex'), index=False, escape=False)
 print("  Saved tables/calibrated_shocks_price_slides.tex")
+
+# ============================================================================
+# 6. Write paper_stats.csv
+# ============================================================================
+print("Writing paper_stats.csv...")
+paper_stats_df = pd.DataFrame(paper_stats_rows, columns=['title', 'diff', 'magnitude'])
+paper_stats_df['diff'] = paper_stats_df['diff'].round(3)
+paper_stats_df['magnitude'] = paper_stats_df['magnitude'].round(1)
+paper_stats_df.to_csv(os.path.join(out_dir, 'paper/paper_stats.csv'), index=False, quoting=csv.QUOTE_NONNUMERIC)
+print(f"  Saved paper/paper_stats.csv ({len(paper_stats_df)} rows)")
 
 print("\nAll tables and figures exported.")
